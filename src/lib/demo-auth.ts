@@ -12,9 +12,12 @@ function sessionSecret(): string | undefined {
   return process.env.DEMO_SESSION_SECRET;
 }
 
+/** Local development always allows the shared account; a deployment only when it opts in:
+ *  PREVIEW_DEMO_AUTH on a protected preview, DEMO_AUTH on any deployment (the public workspace). */
 export function demoConfigured(): boolean {
   const previewAccess = process.env.VERCEL_ENV === "preview" && process.env.PREVIEW_DEMO_AUTH === "enabled";
-  return (process.env.NODE_ENV !== "production" || previewAccess) &&
+  const deployedAccess = process.env.DEMO_AUTH === "enabled";
+  return (process.env.NODE_ENV !== "production" || previewAccess || deployedAccess) &&
     Boolean(process.env.DEMO_LOGIN_EMAIL && process.env.DEMO_LOGIN_PASSWORD && sessionSecret());
 }
 
