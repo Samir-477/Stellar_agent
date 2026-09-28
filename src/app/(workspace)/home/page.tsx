@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { AgentCard } from "@/components/workspace/agent-card";
+import { FocusMap } from "@/components/workspace/focus-map";
 import { SOURCE_ICONS } from "@/components/workspace/icons";
 import { RunStatusLabel } from "@/components/workspace/run-status";
 import { engine } from "@/lib/engine";
@@ -34,6 +35,7 @@ function SectionIntro({ id, title, children }: { id: string; title: string; chil
 
 export default async function HomePage() {
   const [agents, collectors, runs] = await Promise.all([engine.agents(), engine.collectors(), engine.runs(3)]);
+  const latest = runs[0];
   const collectorNames = Object.fromEntries(collectors.map((c) => [c.id, c.name]));
   // Show collectors grouped by source (site, search, AI, web), then by number, rather than in run order.
   const groupOrder = ["site", "search", "ai", "web"];
@@ -46,9 +48,11 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* Home opens with a real choice: run one discipline or all three. */}
-      <section className="border-b border-rule bg-canvas" aria-labelledby="home-title">
-        <div className={`${container} grid min-h-[calc(100svh-134px)] gap-12 py-18 lg:min-h-[calc(100svh-72px)] lg:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)] lg:items-center lg:gap-20 lg:py-24`}>
+      {/* Home opens with a real choice: run one discipline or all three, or reopen the latest run. */}
+      <section className="relative overflow-hidden border-b border-rule bg-canvas" aria-labelledby="home-title">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(0,123,70,0.13)_1px,transparent_0)] bg-size-[24px_24px] mask-[radial-gradient(ellipse_at_30%_45%,black_20%,transparent_72%)]" />
+        <div aria-hidden="true" className="pointer-events-none absolute -top-48 right-[-12%] h-[720px] w-[720px] rounded-full bg-[radial-gradient(closest-side,rgba(95,214,154,0.22),transparent)]" />
+        <div className={`${container} relative grid min-h-[calc(100svh-134px)] gap-12 py-16 lg:min-h-[calc(100svh-72px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,.95fr)] lg:items-center lg:gap-16 lg:py-20`}>
           <div>
             <p className="text-sm font-semibold text-signal">Stellar Agents workspace</p>
             <h1 id="home-title" className="mt-5 max-w-[640px] font-display text-6xl leading-[1.08] font-semibold tracking-[-0.035em] sm:text-7xl">
@@ -58,40 +62,46 @@ export default async function HomePage() {
               Capture the evidence, let independent agents examine it, then review a prioritised diagnosis and a preview of proposed fixes.
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
-              <Link href="/runs/new" className="inline-flex min-h-12 items-center gap-2.5 rounded-[3px] bg-signal px-6 text-base font-semibold text-white transition-colors hover:bg-signal-deep">
+              <Link href="/runs/new" className="inline-flex min-h-12 items-center gap-2.5 rounded-[4px] bg-linear-to-b from-signal to-signal-deep px-6 text-base font-semibold text-white shadow-[0_12px_24px_-12px_rgba(0,103,58,0.85),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[filter] hover:brightness-110">
                 Run all {agents.length} agents <ArrowRight aria-hidden="true" size={16} />
               </Link>
-              <Link href="/sessions" className="inline-flex min-h-12 items-center rounded-[3px] border border-rule-strong bg-paper px-5 text-base font-medium text-ink transition-colors hover:border-ink-3">
+              <Link href="/sessions" className="inline-flex min-h-12 items-center rounded-[4px] border border-rule-strong bg-paper px-5 text-base font-medium text-ink shadow-[0_1px_2px_rgba(3,22,13,0.06)] transition-colors hover:border-ink-3">
                 View sessions
               </Link>
             </div>
-            <p className="mt-8 max-w-[520px] border-l-2 border-rule-strong pl-4 text-sm leading-relaxed text-ink-3">
+            {latest && (
+              <Link href={`/runs/${latest.id}`} className="group mt-10 block max-w-[560px] rounded-[8px] border border-rule bg-paper/90 px-5 py-4 shadow-[0_18px_40px_-28px_rgba(3,22,13,0.45)] backdrop-blur transition-[border-color,box-shadow] hover:border-rule-strong hover:shadow-[0_22px_44px_-26px_rgba(3,22,13,0.5)]">
+                <span className="flex items-center justify-between gap-4 text-2xs text-ink-3">
+                  <span>Latest run, {formatDate(latest.created_at)}</span>
+                  <RunStatusLabel status={latest.status} />
+                </span>
+                <span className="mt-2 flex items-end justify-between gap-6">
+                  <span className="min-w-0">
+                    <span className="block truncate text-md font-semibold">{latest.client_name}</span>
+                    <span className="block truncate font-mono text-2xs text-ink-3">{urlPath(latest.primary_url)}</span>
+                  </span>
+                  {latest.readiness && (
+                    <span className="flex shrink-0 gap-4">
+                      {PILLAR_ORDER.filter((p) => latest.readiness?.[p]).map((p) => (
+                        <span key={p} className="text-right">
+                          <span className="block text-2xs text-ink-3">{PILLARS[p].short}</span>
+                          <span className="block font-display text-xl leading-tight font-semibold">{latest.readiness![p].score ?? "–"}</span>
+                        </span>
+                      ))}
+                      <ArrowRight aria-hidden="true" size={16} className="self-center text-signal transition-transform group-hover:translate-x-1" />
+                    </span>
+                  )}
+                </span>
+              </Link>
+            )}
+            <p className="mt-6 max-w-[520px] text-sm leading-relaxed text-ink-3">
               Search results and AI answers are sampled in India and dated. Every finding points back to its source.
             </p>
           </div>
-          <section aria-labelledby="choose-scope" className="min-w-0 border border-rule bg-paper">
-            <div className="border-b border-rule px-6 py-5 sm:px-7">
-              <h2 id="choose-scope" className="font-display text-2xl font-semibold tracking-tight">Choose a focus</h2>
-              <p className="mt-1 text-sm text-ink-2">Start with one discipline, or run them together.</p>
-            </div>
-            <div>
-              {PILLAR_ORDER.map((pillar) => {
-                const own = agents.filter((agent) => agent.pillar === pillar);
-                return (
-                  <Link key={pillar} href={`/runs/new?agents=${own.map((agent) => agent.id).join(",")}`}
-                        className="group grid gap-3 border-b border-rule px-6 py-5 transition-colors last:border-b-0 hover:bg-soft/60 sm:grid-cols-[72px_minmax(0,1fr)_20px] sm:items-center sm:px-7">
-                    <span className="font-display text-2xl font-semibold tracking-[-0.03em] text-signal">{PILLARS[pillar].short}</span>
-                    <span className="min-w-0">
-                      <span className="block text-base font-semibold">{PILLARS[pillar].name}</span>
-                      <span className="mt-1 block text-sm leading-relaxed text-ink-2">{PILLARS[pillar].outcome}</span>
-                      <span className="mt-2 block font-mono text-2xs text-ink-3">{own.length} agents · {counts[pillar].checks} checks</span>
-                    </span>
-                    <ArrowRight aria-hidden="true" size={18} className="hidden text-signal transition-transform group-hover:translate-x-1 sm:block" />
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
+          <FocusMap options={PILLAR_ORDER.map((pillar) => ({
+            id: pillar, short: PILLARS[pillar].short, name: PILLARS[pillar].name, outcome: PILLARS[pillar].outcome,
+            agentIds: agents.filter((agent) => agent.pillar === pillar).map((agent) => agent.id), checks: counts[pillar].checks,
+          }))} />
         </div>
       </section>
 

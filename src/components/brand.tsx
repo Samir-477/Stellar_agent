@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { site } from "@/lib/site";
 
-/** Three evidence paths converge into one finding, then move toward action. */
+/** The mark: one diagnosis (the star) with the SEO, AEO and GEO agents in orbit around it. */
 export function Brand({ tone = "light", size = "md" }: { tone?: "light" | "dark"; size?: "md" | "lg" }) {
   const [first, ...rest] = site.name.split(" ");
   const markSize = size === "lg" ? 52 : 44;
