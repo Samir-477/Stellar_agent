@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["bom1"],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{node_modules/**,src/**,public/**,tests/**,docs/**,.next/**,.venv/**,.data/**}"
+    }
+  }
+}

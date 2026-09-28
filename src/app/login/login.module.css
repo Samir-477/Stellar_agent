@@ -1,0 +1,122 @@
+.page {
+  --ink: #071b12;
+  --muted: #53645a;
+  --green: #007b46;
+  --line: #dce7e0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(500px, 0.94fr);
+  min-height: 100svh;
+  color: var(--ink);
+  background: #fff;
+  font-family: var(--font-sans);
+  letter-spacing: .01em;
+}
+
+.story {
+  position: relative;
+  overflow: hidden;
+  background: #f1f8f3;
+  border-right: 1px solid var(--line);
+}
+
+.story::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-image: linear-gradient(#dcece1 1px, transparent 1px), linear-gradient(90deg, #dcece1 1px, transparent 1px);
+  background-size: 54px 54px;
+  opacity: .42;
+  mask-image: linear-gradient(to bottom, transparent, #000 15%, #000 82%, transparent);
+  pointer-events: none;
+}
+
+.storyInner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  max-width: 820px;
+  margin-left: auto;
+  padding: 42px clamp(46px, 6vw, 118px) 37px clamp(38px, 5.3vw, 108px);
+}
+
+.storyContent { margin-block: auto; padding-block: 78px 72px; }
+.eyebrow { margin: 0 0 23px; color: var(--green); font-size: 12px; font-weight: 720; letter-spacing: .13em; text-transform: uppercase; }
+.story h1 { max-width: 690px; margin: 0; font-family: var(--font-display); font-size: clamp(43px, 4vw, 66px); font-weight: 610; letter-spacing: -.035em; line-height: 1.08; }
+.storyIntro { max-width: 610px; margin: 24px 0 0; color: var(--muted); font-size: clamp(16px, 1.25vw, 19px); letter-spacing: .015em; line-height: 1.65; }
+.route { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-top: clamp(62px, 8vh, 110px); padding-top: 17px; border-top: 1px solid #bed8c6; }
+.routeLine { position: absolute; top: -1px; left: 0; width: 38%; height: 2px; background: var(--green); }
+.routeStage { position: relative; padding: 25px 11px 0 0; min-width: 0; }
+.routeStage + .routeStage { padding-left: 11px; border-left: 1px solid #d5e6da; }
+.routeNode { position: absolute; top: -22px; left: 0; width: 10px; height: 10px; border: 2px solid var(--green); border-radius: 50%; background: #f1f8f3; }
+.routeStage + .routeStage .routeNode { left: 11px; }
+.routeStage:nth-child(2) .routeNode { background: var(--green); }
+.routeNumber { display: block; color: var(--green); font-family: var(--font-mono); font-size: 11px; margin-bottom: 25px; }
+.routeStage strong { font-size: 15px; font-weight: 660; }
+.routeStage p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.storyFoot { margin: 0; color: #567164; font-size: 13px; }
+
+.formSide { display: flex; flex-direction: column; min-width: 0; padding: 46px clamp(36px, 5.6vw, 110px) 37px; background: #fff; }
+.formTop { display: flex; align-items: center; gap: 16px; white-space: nowrap; color: #65786b; font-size: 12px; }
+.workspaceLabel { color: var(--ink); font-weight: 610; }
+.topRule { height: 1px; flex: 1; background: var(--line); }
+.topIndex { font-family: var(--font-mono); font-size: 11px; }
+.formWrap { width: min(100%, 436px); margin: auto; padding-block: 65px; }
+.formHeading { display: flex; align-items: center; gap: 9px; color: var(--green); font-size: 13px; font-weight: 650; }
+.formHeading p { margin: 0; }
+.greenDot { width: 7px; height: 7px; border-radius: 50%; background: #46d38a; box-shadow: 0 0 0 5px #e4f5ea; }
+.formWrap h2 { max-width: 460px; margin: 19px 0 0; font-family: var(--font-display); font-size: clamp(36px, 3vw, 50px); font-weight: 610; letter-spacing: -.03em; line-height: 1.12; }
+.formIntro { margin: 19px 0 0; color: #67766c; font-size: 16px; letter-spacing: .015em; line-height: 1.55; }
+.form { margin-top: 49px; }
+.field + .field { margin-top: 25px; }
+.field label { display: block; margin-bottom: 10px; font-size: 13px; font-weight: 660; letter-spacing: .025em; }
+.field input { display: block; width: 100%; height: 54px; padding: 0 16px; border: 1px solid #cddbd2; border-radius: 4px; background: #fff; color: var(--ink); font: inherit; font-size: 15px; outline: none; transition: border-color .18s, box-shadow .18s; }
+.field input::placeholder { color: #87958b; }
+.field input:hover { border-color: #849f8d; }
+.field input:focus-visible { border-color: var(--green); box-shadow: 0 0 0 3px #d6f2df; }
+.passwordField { position: relative; }
+.passwordField input { padding-right: 78px; }
+.visibilityButton { position: absolute; top: 5px; right: 5px; min-width: 60px; min-height: 44px; border: 0; border-radius: 3px; background: transparent; color: var(--green); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.visibilityButton:hover { background: #eef8f0; }
+.visibilityButton:focus-visible, .submit:focus-visible { outline: 3px solid #88d9ab; outline-offset: 3px; }
+.submit { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 54px; margin-top: 31px; padding: 0 18px; border: 1px solid var(--green); border-radius: 4px; background: var(--green); color: #fff; font: inherit; font-size: 15px; font-weight: 650; cursor: pointer; transition: background .18s, transform .18s; }
+.submit:hover { background: #00673a; }
+.submit:active { transform: translateY(1px); }
+.submit:disabled { cursor: wait; opacity: .75; }
+.submit svg { width: 20px; height: 20px; }
+.formMessage { margin: 18px 0 0; padding: 13px 14px; border-left: 3px solid #9a5a00; background: #fff2d7; color: #62400b; font-size: 13px; line-height: 1.5; }
+.formNote { display: flex; gap: 10px; margin-top: 26px; color: #687a6e; }
+.noteIcon { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid #9aaca0; border-radius: 50%; font-family: Georgia, serif; font-size: 12px; font-style: italic; line-height: 1; }
+.formNote p { margin: 0; font-size: 12px; line-height: 1.55; }
+.formFoot { display: flex; justify-content: space-between; gap: 14px; color: #738179; font-size: 12px; }
+
+@media (max-width: 1100px) {
+  .page { grid-template-columns: minmax(0, 1fr) minmax(420px, 1fr); }
+  .storyInner { padding-inline: 40px; }
+  .story h1 { font-size: clamp(40px, 4.5vw, 55px); }
+  .routeStage p { display: none; }
+  .formSide { padding-inline: 45px; }
+}
+
+@media (max-width: 760px) {
+  .page { display: flex; flex-direction: column; }
+  .story { border-right: 0; border-bottom: 1px solid var(--line); }
+  .storyInner { min-height: 0; margin: 0; padding: 26px 25px 27px; }
+  .storyContent { padding: 52px 0 0; }
+  .story h1 { max-width: 580px; font-size: clamp(37px, 8vw, 52px); }
+  .storyIntro { margin-top: 17px; font-size: 15px; }
+  .route, .storyFoot { display: none; }
+  .formSide { flex: 1; padding: 27px 25px; }
+  .formWrap { margin: 0 auto; padding-block: 54px 68px; }
+  .formWrap h2 { font-size: 37px; }
+  .form { margin-top: 37px; }
+  .formFoot { margin-top: auto; }
+}
+
+@media (max-width: 440px) {
+  .formFoot { flex-direction: column; gap: 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field input, .submit { transition: none; }
+}
