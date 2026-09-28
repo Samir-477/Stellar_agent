@@ -1,8 +1,20 @@
-# Protected Vercel preview
+# Vercel deployment
+
+## Public production (current)
+
+The workspace runs on the Vercel project `stellar-agent-platform` at https://stellar-agent-platform.vercel.app, connected to `github.com/Samir-477/Stellar_agent`. Every push to `main` deploys to production.
+
+- `vercel.json` sets the Next.js framework, the `bom1` region (next to the Supabase database in ap-south-1), and rewrites `/api/v1/*` to the Python engine in `api/index.py`.
+- Vercel installs the engine's Python packages from `pyproject.toml`, not `requirements.txt`. Keep the two lists in step.
+- The shared workspace login is enabled with `DEMO_AUTH=enabled`. Its password is a long random value, not the local demo password. Anyone with the login can start runs that use paid providers.
+- Production variables: the Supabase database and storage settings from the local `.env`, `BLOB_STORE=supabase`, `DEPLOY_TARGET=vercel`, `RUNNER=http`, fresh `ENGINE_API_KEY`, `INTERNAL_SECRET` and `DEMO_SESSION_SECRET`, the provider keys, and `NEXT_PUBLIC_SITE_URL`, `APP_BASE_URL`, `ENGINE_API_URL` and `DASHBOARD_ORIGINS`, all set to the production URL. Using the production URL keeps previews and engine calls off the per-deployment URLs, which Vercel's Standard Protection hides behind its login.
+- `LLM_MODE` is `off` until a first run on Vercel has been checked; then set it to `live` and redeploy.
+
+## Protected preview
 
 This is a review deployment, not a production client workspace. Production still needs per-user authentication and authorization. A preview uses the configured demo account only when `VERCEL_ENV=preview` and `PREVIEW_DEMO_AUTH=enabled`; production deployments disable it.
 
-## Project setup
+### Project setup
 
 1. Link this repository root to one Vercel project with the Next.js framework preset and the default root directory. Deploy with `vercel deploy`, not `--prod`.
 2. In the project settings, enable **Vercel Authentication** with **Standard Protection**. Check that an unsigned browser sees the Vercel login gate before the app. Enable **Automatically expose System Environment Variables** so `VERCEL_URL` and `VERCEL_ENV` are available to both runtimes.
@@ -21,7 +33,7 @@ This is a review deployment, not a production client workspace. Production still
 
 `APP_BASE_URL`, `ENGINE_API_URL`, `DASHBOARD_ORIGINS`, and `NEXT_PUBLIC_SITE_URL` can use the current `VERCEL_URL` defaults. Do not set them to localhost. The deployed API is under `/api/v1/*` and is served by `api/index.py`; the production Next.js rewrite must remain disabled so FastAPI receives the original route.
 
-## Verify the preview before sharing it
+### Verify the preview before sharing it
 
 1. Confirm the Vercel Authentication gate with an unsigned browser. Then sign in to Stellar Agents and open Home, New run, Sessions, and an existing run.
 2. Confirm the Python engine responds to `/api/v1/health` (or its actual health route) through the preview URL. Check Vercel function logs for Python import, database, and routing errors.

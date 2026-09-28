@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
-// In development, forward engine requests to uvicorn. On Vercel, api/index.py
-// receives /api/v1/* directly; rewriting to /api/index would lose the API path.
+// In development, forward engine requests to uvicorn. On Vercel, vercel.json rewrites
+// /api/v1/* to api/index.py, and FastAPI still sees the original /api/v1 path.
 const engineDev = process.env.ENGINE_DEV_URL ?? "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
