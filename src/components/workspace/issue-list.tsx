@@ -130,6 +130,9 @@ export function IssueList({ issues, emptyText = "This agent found no issues." }:
     if (window.innerWidth < 1024) document.getElementById("issue-detail")?.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
+  // A one-item list only repeats the title, so a single issue gets the full width.
+  if (issues.length === 1) return <div className="max-w-[960px]"><IssueDetail issue={issue} /></div>;
+
   return (
     <div className="grid gap-8 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-12">
       <ul aria-label="Issues" className="self-start border border-rule lg:sticky lg:top-[152px] lg:max-h-[calc(100vh-170px)] lg:overflow-y-auto">

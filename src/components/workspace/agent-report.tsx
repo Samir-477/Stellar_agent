@@ -5,7 +5,7 @@ import { useState } from "react";
 import { AgentIcon } from "@/components/workspace/icons";
 import { IssueList } from "@/components/workspace/issue-list";
 import { CheckLabel } from "@/components/workspace/status";
-import { urlPath } from "@/lib/format";
+import { plural, urlPath } from "@/lib/format";
 import type { AgentReport, IssueCard, ReportIssue } from "@/lib/types";
 
 // One agent's own findings, with no cross-agent synthesis: what it is responsible for, its verdict,
@@ -20,16 +20,30 @@ const SCORE_PARTS = [
 ] as const;
 
 export function Scorecard({ scorecard, compact = false }: { scorecard: AgentReport["scorecard"]; compact?: boolean }) {
-  const total = SCORE_PARTS.reduce((sum, p) => sum + (scorecard[p.key] ?? 0), 0) || 1;
-  const text = SCORE_PARTS.filter((p) => scorecard[p.key]).map((p) => `${scorecard[p.key]} ${p.label}`).join(", ");
+  const total = scoreTotal(scorecard) || 1;
+  const present = SCORE_PARTS.filter((p) => scorecard[p.key]);
+  const text = present.map((p) => `${scorecard[p.key]} ${p.label}`).join(", ");
   return (
     <div>
-      <div className={`flex overflow-hidden rounded-[2px] ${compact ? "h-1.5" : "h-2.5"}`} role="img" aria-label={`Checks: ${text}`}>
-        {SCORE_PARTS.map((p) => (scorecard[p.key] ? <span key={p.key} className={p.className} style={{ width: `${(100 * scorecard[p.key]) / total}%` }} /> : null))}
+      <div className={`flex overflow-hidden rounded-[2px] ${compact ? "h-1.5" : "h-2"}`} role="img" aria-label={`Checks: ${text}`}>
+        {present.map((p) => <span key={p.key} className={p.className} style={{ width: `${(100 * scorecard[p.key]) / total}%` }} />)}
       </div>
-      {!compact && <p className="mt-2 text-sm text-ink-2">{text}</p>}
+      {!compact && (
+        <ul aria-hidden="true" className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-2">
+          {present.map((p) => (
+            <li key={p.key} className="flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${p.className}`} />
+              <span className="font-semibold text-ink">{scorecard[p.key]}</span> {p.label}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
+}
+
+function scoreTotal(scorecard: AgentReport["scorecard"]): number {
+  return SCORE_PARTS.reduce((sum, p) => sum + (scorecard[p.key] ?? 0), 0);
 }
 
 const LABELS: Record<string, string> = {
@@ -134,22 +148,25 @@ export function AgentReportView({ report, question, issues }: { report: AgentRep
   const withCode = cards.filter((c) => c.changes.length).length;
   return (
     <article>
-      <header className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-end">
-        <div className="flex items-start gap-4">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[4px] bg-soft text-signal"><AgentIcon id={report.agent_id} size={20} /></span>
-          <div>
-            <p className="font-mono text-2xs text-signal">{report.agent_id}</p>
-            <h2 className="font-display text-4xl leading-tight font-semibold tracking-[-0.02em]">{report.agent_name}</h2>
-            {question && <p className="mt-2 text-base text-ink-2"><span className="font-semibold text-ink">Responsible for: </span>{question}</p>}
+      <header>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-12">
+          <div className="flex items-start gap-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[5px] bg-soft text-signal"><AgentIcon id={report.agent_id} size={20} /></span>
+            <div className="min-w-0">
+              <p className="font-mono text-2xs text-signal">{report.agent_id}</p>
+              <h2 className="font-display text-4xl leading-tight font-semibold tracking-[-0.02em]">{report.agent_name}</h2>
+              {question && <p className="mt-1.5 text-base text-ink-2"><span className="font-semibold text-ink">Responsible for: </span>{question}</p>}
+            </div>
+          </div>
+          <div className="lg:pt-1">
+            <p className="mb-2 text-sm font-semibold text-ink">{plural(scoreTotal(report.scorecard), "check")}</p>
+            <Scorecard scorecard={report.scorecard} />
           </div>
         </div>
-        <div className="border border-rule bg-mist px-5 py-4">
-          <p className="text-base leading-relaxed text-ink">{report.verdict}</p>
-          <div className="mt-3"><Scorecard scorecard={report.scorecard} /></div>
-        </div>
+        <p className="mt-6 border-l-[3px] border-signal bg-mist px-5 py-3.5 text-base leading-relaxed text-ink">{report.verdict}</p>
       </header>
 
-      <div role="tablist" aria-label="Report sections" className="mt-10 flex flex-wrap gap-2 border-b border-rule pb-3">
+      <div role="tablist" aria-label="Report sections" className="mt-8 flex flex-wrap gap-2 border-b border-rule pb-3">
         {([
           ["issues", `Issues ${cards.length}`, withCode ? `${withCode} with code changes` : ""],
           ["collected", "What it collected", ""],
