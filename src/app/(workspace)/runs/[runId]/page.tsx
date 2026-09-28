@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { AppWindow, Bot, ExternalLink, Sparkles } from "lucide-react";
 import { AgentsLayer } from "@/components/workspace/agents-layer";
 import { IntelligenceLayer } from "@/components/workspace/intelligence-layer";
 import { LiveRun } from "@/components/workspace/live-run";
@@ -13,9 +13,9 @@ import { sameUrl } from "@/lib/microsite";
 import type { IntelligenceReport, IssueCard, MicrositeSummary, Progress } from "@/lib/types";
 
 const LAYERS = [
-  { id: "intelligence", label: "Intelligence", hint: "The business summary across all agents" },
-  { id: "agents", label: "Agents", hint: "What each agent checked, found and proposes" },
-  { id: "output", label: "Output", hint: "The fixed page and its code changes" },
+  { id: "intelligence", label: "Intelligence", hint: "The business summary across all agents", icon: Sparkles },
+  { id: "agents", label: "Agents", hint: "What each agent checked, found and proposes", icon: Bot },
+  { id: "output", label: "Output", hint: "The fixed page and its code changes", icon: AppWindow },
 ] as const;
 type LayerId = (typeof LAYERS)[number]["id"] | "log";
 
@@ -92,14 +92,22 @@ export default async function RunPage({ params, searchParams }: PageProps<"/runs
         <LiveRun runId={runId} initial={progress} />
       ) : (
         <>
-          <nav aria-label="Result layers" className="mt-10 grid grid-cols-3 border border-rule">
-            {LAYERS.map((item, index) => {
+          <nav aria-label="Result layers" className="mt-10 grid grid-cols-3 gap-1.5 rounded-[8px] border border-rule bg-canvas p-1.5 shadow-[inset_0_1px_3px_rgba(3,22,13,0.05)]">
+            {LAYERS.map((item) => {
               const active = item.id === layer;
+              const Icon = item.icon;
               return (
                 <Link key={item.id} href={`/runs/${runId}?layer=${item.id}`} aria-current={active ? "page" : undefined} scroll={false}
-                      className={`group flex min-h-16 flex-col justify-center px-5 py-3 transition-colors sm:px-7 ${index ? "border-l border-rule" : ""} ${active ? "bg-signal text-white" : "hover:bg-mist"}`}>
-                  <span className="text-base font-semibold">{item.label}</span>
-                  <span className={`hidden text-xs sm:block ${active ? "text-white/80" : "text-ink-3"}`}>{item.hint}</span>
+                      className={`group flex min-h-16 items-center gap-3.5 rounded-[5px] px-4 py-3 transition-[background-color,box-shadow,color] duration-200 sm:px-5 ${active
+                        ? "bg-linear-to-b from-signal to-signal-deep text-white shadow-[0_12px_24px_-14px_rgba(0,103,58,0.9),inset_0_1px_0_rgba(255,255,255,0.16)]"
+                        : "bg-paper text-ink shadow-[0_1px_2px_rgba(3,22,13,0.07)] hover:shadow-[0_8px_20px_-12px_rgba(3,22,13,0.28)]"}`}>
+                  <span aria-hidden="true" className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-[5px] transition-colors sm:flex ${active ? "bg-white/15 text-white" : "bg-soft text-signal group-hover:bg-[#d3eedd]"}`}>
+                    <Icon size={17} strokeWidth={2.1} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-base font-semibold">{item.label}</span>
+                    <span className={`hidden text-xs sm:block ${active ? "text-white/80" : "text-ink-3"}`}>{item.hint}</span>
+                  </span>
                 </Link>
               );
             })}

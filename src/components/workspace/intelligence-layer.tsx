@@ -47,21 +47,19 @@ export function IntelligenceLayer({ runId, report, agentNames }: {
 
   return (
     <div className="space-y-20">
-      <section aria-labelledby="glance-heading" className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-        <div>
-          <h2 id="glance-heading" className="text-sm font-semibold text-signal">At a glance</h2>
-          <div className="mt-4 space-y-4">
-            {summary.length ? summary.map((s, i) => (
-              <p key={i} className={i === 0 ? "font-display text-3xl leading-[1.3] font-medium tracking-[-0.015em]" : "text-lg leading-relaxed text-ink-2"}>{s.text}</p>
-            )) : <p className="text-lg text-ink-2">No summary was written for this run.</p>}
-          </div>
+      <section aria-labelledby="glance-heading">
+        <h2 id="glance-heading" className="text-sm font-semibold text-signal">At a glance</h2>
+        <div className="mt-4 max-w-[880px] space-y-3">
+          {summary.length ? summary.map((s, i) => (
+            <p key={i} className={i === 0 ? "font-display text-3xl leading-[1.3] font-medium tracking-[-0.015em]" : "text-lg leading-relaxed text-ink-2"}>{s.text}</p>
+          )) : <p className="text-lg text-ink-2">No summary was written for this run.</p>}
         </div>
-        <div className="grid gap-3 self-start">
+        <div className="mt-8 grid gap-3 md:grid-cols-3">
           {PILLAR_ORDER.filter((p) => report.readiness[p]).map((pillar) => {
             const r = report.readiness[pillar];
             return (
-              <div key={pillar} className="border border-rule bg-paper px-6 py-5">
-                <div className="flex items-baseline justify-between gap-4">
+              <div key={pillar} className="flex flex-col border border-rule bg-paper px-6 py-5">
+                <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-base font-semibold">{PLAIN_NAME[pillar].name}</p>
                     <p className="mt-0.5 text-xs text-ink-3">{PILLARS[pillar].short}: {PLAIN_NAME[pillar].meaning}</p>
@@ -71,16 +69,18 @@ export function IntelligenceLayer({ runId, report, agentNames }: {
                     <span className="ml-1 font-mono text-2xs text-ink-3">/100</span>
                   </p>
                 </div>
-                <div className="relative mt-4" aria-hidden="true">
-                  <div className="flex h-1.5 overflow-hidden rounded-[1px]">
-                    {BANDS.map((b) => <span key={b.label} className={b.tone} style={{ width: `${b.to - b.from}%` }} />)}
+                <div className="mt-auto pt-5">
+                  <div className="relative" aria-hidden="true">
+                    <div className="flex h-1.5 overflow-hidden rounded-[1px]">
+                      {BANDS.map((b) => <span key={b.label} className={b.tone} style={{ width: `${b.to - b.from}%` }} />)}
+                    </div>
+                    {r.score !== null && <span className="absolute -top-1 h-3.5 w-[3px] -translate-x-1/2 rounded-full bg-ink" style={{ left: `${r.score}%` }} />}
                   </div>
-                  {r.score !== null && <span className="absolute -top-1 h-3.5 w-[3px] -translate-x-1/2 rounded-full bg-ink" style={{ left: `${r.score}%` }} />}
+                  <p className="mt-2 flex justify-between text-2xs text-ink-3">
+                    <span className="font-semibold text-ink">{bandName(r.band)}</span>
+                    <span>Based on {r.coverage}% of the checks</span>
+                  </p>
                 </div>
-                <p className="mt-2 flex justify-between text-2xs text-ink-3">
-                  <span className="font-semibold text-ink">{bandName(r.band)}</span>
-                  <span>Based on {r.coverage}% of the checks</span>
-                </p>
               </div>
             );
           })}
