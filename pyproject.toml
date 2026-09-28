@@ -2,6 +2,18 @@
 name = "site-diagnosis-engine"
 version = "0.1.0"
 requires-python = ">=3.12"
+# Engine runtime. Vercel installs from this list (it prefers pyproject.toml over requirements.txt);
+# keep requirements.txt in step for pip installs.
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "pydantic>=2.9,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    "httpx>=0.28,<1.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "psycopg-pool>=3.2,<4.0",
+    "lxml>=5.3,<7.0",
+    "cssselect>=1.2,<2.0",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
