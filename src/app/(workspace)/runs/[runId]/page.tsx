@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppWindow, Bot, ExternalLink, Sparkles } from "lucide-react";
+import { Suspense, cache } from "react";
 import { AgentsLayer } from "@/components/workspace/agents-layer";
 import { IntelligenceLayer } from "@/components/workspace/intelligence-layer";
 import { LiveRun } from "@/components/workspace/live-run";
@@ -10,7 +11,7 @@ import { RunStatusLabel, isFinished } from "@/components/workspace/run-status";
 import { EngineError, engine, isRunId } from "@/lib/engine";
 import { formatDate, formatDuration, plural } from "@/lib/format";
 import { sameUrl } from "@/lib/microsite";
-import type { IntelligenceReport, IssueCard, MicrositeIssue, MicrositeSummary, Progress } from "@/lib/types";
+import type { IssueCard, MicrositeSummary, Progress } from "@/lib/types";
 
 const LAYERS = [
   { id: "intelligence", label: "Intelligence", hint: "The business summary across all agents", icon: Sparkles },
@@ -19,14 +20,21 @@ const LAYERS = [
 ] as const;
 type LayerId = (typeof LAYERS)[number]["id"] | "log";
 
+function isLayer(value: unknown): value is LayerId {
+  return value === "log" || LAYERS.some((l) => l.id === value);
+}
+
 const ARCHETYPE_LABEL: Record<string, string> = {
   hospitality: "Hotels and resorts", loans: "Loans and lending", retail: "Retail", logistics: "Logistics",
 };
 
+// One progress read per request, shared by the page and its metadata.
+const getProgress = cache((runId: string) => engine.progress(runId));
+
 async function load(runId: string): Promise<Progress> {
   if (!isRunId(runId)) notFound();
   try {
-    return await engine.progress(runId);
+    return await getProgress(runId);
   } catch (error) {
     if (error instanceof EngineError && error.status === 404) notFound();
     throw error;
@@ -37,7 +45,7 @@ export async function generateMetadata({ params }: PageProps<"/runs/[runId]">): 
   const { runId } = await params;
   if (!isRunId(runId)) return { title: "Run" };
   try {
-    return { title: `${(await engine.progress(runId)).run.client.name} run` };
+    return { title: `${(await getProgress(runId)).run.client.name} run` };
   } catch {
     return { title: "Run" };
   }
@@ -45,15 +53,18 @@ export async function generateMetadata({ params }: PageProps<"/runs/[runId]">): 
 
 export default async function RunPage({ params, searchParams }: PageProps<"/runs/[runId]">) {
   const [{ runId }, query] = await Promise.all([params, searchParams]);
+  const requested = isLayer(query.layer) ? query.layer : null;
+  // When the address names a layer, its data starts loading now, alongside the run header, not after it.
+  const early = isRunId(runId) ? {
+    intelligence: requested === "intelligence" ? handled(loadIntelligence(runId)) : undefined,
+    agents: requested === "agents" ? handled(loadAgents(runId)) : undefined,
+    output: requested === "output" ? handled(loadOutput(runId)) : undefined,
+  } : {};
   const progress = await load(runId);
   const { run } = progress;
   const finished = isFinished(progress.status);
   const agentCount = run.agents.length;
-
-  const report = finished && agentCount >= 2 ? await engine.report(runId) : null;
-  const requested = typeof query.layer === "string" ? query.layer : "";
-  const layer: LayerId = requested === "log" || LAYERS.some((l) => l.id === requested) ? (requested as LayerId)
-    : report ? "intelligence" : "agents";
+  const layer: LayerId = requested ?? (agentCount >= 2 ? "intelligence" : "agents");
 
   return (
     <div className="mx-auto max-w-[1200px] px-5 pt-12 pb-28 sm:px-8">
@@ -114,24 +125,12 @@ export default async function RunPage({ params, searchParams }: PageProps<"/runs
           </nav>
 
           <div className="mt-12">
-            {layer === "intelligence" && (report ? (
-              <IntelligenceSection runId={runId} report={report} />
-            ) : (
-              <div className="border border-rule bg-mist px-6 py-10">
-                <h2 className="font-display text-2xl font-semibold tracking-tight">No intelligence report for this run</h2>
-                <p className="mt-2 max-w-[620px] text-base leading-relaxed text-ink-2">
-                  {agentCount < 2
-                    ? "This run had one agent. The intelligence layer merges findings across two or more agents, so read this agent's report directly."
-                    : "The agents finished but the intelligence report wasn't saved. The agent reports are still complete."}
-                </p>
-                <Link href={`/runs/${runId}?layer=agents`} className="mt-5 inline-flex min-h-11 items-center rounded-[3px] bg-signal px-5 text-base font-semibold text-white hover:bg-signal-deep">
-                  Open agent reports
-                </Link>
-              </div>
-            ))}
-            {layer === "agents" && <AgentsSection runId={runId} selected={typeof query.agent === "string" ? query.agent : undefined} />}
-            {layer === "output" && <OutputSection runId={runId} client={run.client} />}
-            {layer === "log" && <LiveRun runId={runId} initial={progress} live={false} />}
+            <Suspense key={layer} fallback={<LayerLoading />}>
+              {layer === "intelligence" && <IntelligenceSection runId={runId} agentCount={agentCount} data={early.intelligence} />}
+              {layer === "agents" && <AgentsSection runId={runId} selected={typeof query.agent === "string" ? query.agent : undefined} data={early.agents} />}
+              {layer === "output" && <OutputSection runId={runId} client={run.client} data={early.output} />}
+              {layer === "log" && <LiveRun runId={runId} initial={progress} live={false} />}
+            </Suspense>
           </div>
         </>
       )}
@@ -139,9 +138,18 @@ export default async function RunPage({ params, searchParams }: PageProps<"/runs
   );
 }
 
-async function IntelligenceSection({ runId, report }: { runId: string; report: IntelligenceReport }) {
-  const agents = await engine.agents();
-  return <IntelligenceLayer runId={runId} report={report} agentNames={Object.fromEntries(agents.map((a) => [a.id, a.name]))} />;
+/** Shown while a layer's data streams in, so the run header never waits for it. */
+function LayerLoading() {
+  return (
+    <div role="status" aria-label="Loading this layer" className="space-y-5">
+      <div className="h-9 w-2/5 animate-pulse rounded-[4px] bg-mist" />
+      <div className="h-4 w-3/5 animate-pulse rounded-[4px] bg-mist" />
+      <div className="grid gap-3 md:grid-cols-3">
+        {[0, 1, 2].map((i) => <div key={i} className="h-36 animate-pulse rounded-[6px] bg-mist" />)}
+      </div>
+      <div className="h-64 animate-pulse rounded-[6px] bg-mist" />
+    </div>
+  );
 }
 
 /** Optional data: if it can't load, the layer still renders from what it has instead of failing the page. */
@@ -154,20 +162,51 @@ async function settle<T>(promise: Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-async function AgentsSection({ runId, selected }: { runId: string; selected?: string }) {
-  const [reports, agents, issues] = await Promise.all([
-    engine.agentReports(runId), engine.agents(), settle<IssueCard[] | null>(engine.issues(runId), null),
-  ]);
+/** A promise started early and awaited later; this only keeps an early failure from being reported as unhandled. */
+function handled<T>(promise: Promise<T>): Promise<T> {
+  promise.catch(() => undefined);
+  return promise;
+}
+
+const loadIntelligence = (runId: string) => Promise.all([engine.report(runId), engine.agents()]);
+const loadAgents = (runId: string) => Promise.all([
+  engine.agentReports(runId), engine.agents(), settle<IssueCard[] | null>(engine.issues(runId), null),
+]);
+const loadOutput = (runId: string) => Promise.all([engine.preview(runId), settle<MicrositeSummary[]>(engine.microsites(), [])]);
+
+async function IntelligenceSection({ runId, agentCount, data }: {
+  runId: string; agentCount: number; data?: ReturnType<typeof loadIntelligence>;
+}) {
+  const [report, agents] = await (data ?? loadIntelligence(runId));
+  if (!report) {
+    return (
+      <div className="border border-rule bg-mist px-6 py-10">
+        <h2 className="font-display text-2xl font-semibold tracking-tight">No intelligence report for this run</h2>
+        <p className="mt-2 max-w-[620px] text-base leading-relaxed text-ink-2">
+          {agentCount < 2
+            ? "This run had one agent. The intelligence layer merges findings across two or more agents, so read this agent's report directly."
+            : "The agents finished but the intelligence report wasn't saved. The agent reports are still complete."}
+        </p>
+        <Link href={`/runs/${runId}?layer=agents`} className="mt-5 inline-flex min-h-11 items-center rounded-[3px] bg-signal px-5 text-base font-semibold text-white hover:bg-signal-deep">
+          Open agent reports
+        </Link>
+      </div>
+    );
+  }
+  return <IntelligenceLayer runId={runId} report={report} agentNames={Object.fromEntries(agents.map((a) => [a.id, a.name]))} />;
+}
+
+async function AgentsSection({ runId, selected, data }: { runId: string; selected?: string; data?: ReturnType<typeof loadAgents> }) {
+  const [reports, agents, issues] = await (data ?? loadAgents(runId));
   return <AgentsLayer runId={runId} reports={reports} agents={agents} issues={issues} initial={selected} />;
 }
 
-async function OutputSection({ runId, client }: { runId: string; client: Progress["run"]["client"] }) {
-  const [preview, issues, pageIssues, microsites] = await Promise.all([
-    engine.preview(runId), settle<IssueCard[]>(engine.issues(runId), []),
-    settle<MicrositeIssue[] | null>(engine.pageIssues(runId), null), settle<MicrositeSummary[]>(engine.microsites(), []),
-  ]);
+async function OutputSection({ runId, client, data }: {
+  runId: string; client: Progress["run"]["client"]; data?: ReturnType<typeof loadOutput>;
+}) {
+  const [preview, microsites] = await (data ?? loadOutput(runId));
   const live = microsites.find((m) => !m.superseded_at && !m.unpublished_at && sameUrl(m.source_url, client.primary_url)) ?? null;
   // Remount when the server hands over freshly signed links.
-  return <OutputLayer key={preview?.links_expire_at ?? "none"} runId={runId} initial={preview} issues={issues} pageIssues={pageIssues}
+  return <OutputLayer key={preview?.links_expire_at ?? "none"} runId={runId} initial={preview}
                       entryUrl={client.primary_url} archetype={client.archetype} clientName={client.name} live={live} />;
 }

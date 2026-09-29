@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function SessionsPage() {
-  const [runs, archived] = await Promise.all([engine.runs(200), engine.runs(200, true)]);
+  const runs = await engine.runs(200);
   return (
     <div className="mx-auto max-w-[1200px] px-5 pt-14 pb-28 sm:px-8 lg:pt-20">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -23,8 +23,8 @@ export default async function SessionsPage() {
           New run
         </Link>
       </div>
-      {runs.length || archived.length ? (
-        <SessionsTable runs={runs} archived={archived} />
+      {runs.length ? (
+        <SessionsTable runs={runs} />
       ) : (
         <div className="mt-10 border border-rule bg-canvas px-6 py-12">
           <h2 className="font-display text-2xl font-semibold tracking-tight">No runs yet</h2>

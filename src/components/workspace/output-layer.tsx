@@ -3,14 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ExternalLink, Globe, RefreshCw, Send } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { MicrositeIssues } from "@/components/microsite/microsite-issues";
 import { PreviewFrame } from "@/components/workspace/preview-frame";
 import { formatDate, urlPath } from "@/lib/format";
 import { ARCHETYPE_LABEL, micrositeHref, pagePath, sameUrl, slugify } from "@/lib/microsite";
-import type { CodeChange, IssueCard, MicrositeIssue, MicrositeSummary, Preview } from "@/lib/types";
-
-type PageChange = { issue: IssueCard; change: CodeChange };
+import type { MicrositeSummary, Preview } from "@/lib/types";
 
 /** Approve the preview and publish it as a microsite at /microsites/{archetype}/{client}/{page path}. */
 function PublishPanel({ runId, entryUrl, archetype, clientName, live }: {
@@ -120,11 +118,9 @@ function PublishPanel({ runId, entryUrl, archetype, clientName, live }: {
 }
 
 /** The Output layer for the diagnosed URL: the page with the fixes applied beside what was fixed and what is left, with the code. */
-export function OutputLayer({ runId, initial, issues, pageIssues, entryUrl, archetype, clientName, live }: {
+export function OutputLayer({ runId, initial, entryUrl, archetype, clientName, live }: {
   runId: string;
   initial: Preview | null;
-  issues: IssueCard[];
-  pageIssues: MicrositeIssue[] | null; // null: the page review was unavailable
   entryUrl: string;
   archetype: string | null;
   clientName: string;
@@ -143,9 +139,6 @@ export function OutputLayer({ runId, initial, issues, pageIssues, entryUrl, arch
     return () => clearTimeout(timer);
   }, [preview, router]);
 
-  const changes = useMemo<PageChange[]>(() => issues.flatMap((issue) => issue.changes
-    .filter((change) => sameUrl(change.page_url, entryUrl))
-    .map((change) => ({ issue, change }))), [issues, entryUrl]);
 
   async function build() {
     setBuilding(true);
@@ -163,7 +156,9 @@ export function OutputLayer({ runId, initial, issues, pageIssues, entryUrl, arch
   }
 
   const page = preview?.pages.find((p) => sameUrl(p.url, entryUrl));
-  const placed = changes.filter((c) => c.change.placed !== false).length;
+  // The preview carries the page's placement results and issue list, so this layer needs no other request.
+  const changes = page?.changes ?? [];
+  const placed = changes.filter((c) => c.placed).length;
 
   return (
     <div className="space-y-14">
@@ -201,9 +196,9 @@ export function OutputLayer({ runId, initial, issues, pageIssues, entryUrl, arch
             <div className="grid gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
               <div className="min-w-0"><PreviewFrame views={page.views} pageUrl={page.url} /></div>
               <aside aria-label="Technical details" className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-120px)] lg:self-start lg:overflow-y-auto">
-                {pageIssues
-                  ? <MicrositeIssues issues={pageIssues} wide />
-                  : <p className="border border-rule bg-mist px-5 py-6 text-sm text-ink-2">The technical details couldn&apos;t be loaded. Each agent&apos;s issues and code are in the Agents layer.</p>}
+                {preview?.issues
+                  ? <MicrositeIssues issues={preview.issues} wide />
+                  : <p className="border border-rule bg-mist px-5 py-6 text-sm text-ink-2">This preview was built before the technical details were saved with it. Choose Rebuild preview to add them.</p>}
               </aside>
             </div>
           ) : (

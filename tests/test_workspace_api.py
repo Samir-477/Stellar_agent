@@ -31,15 +31,31 @@ def test_every_registered_component_has_catalog_words():
     assert all(a["question"].endswith("?") and a["outcome"] and a["how"] and a["example"] for a in catalog.AGENTS.values())
 
 
-def test_archive_route_preserves_run_and_reports(monkeypatch):
-    """Hide/Restore routes only toggle visibility; they never delete a run."""
-    import engine.api.app as app_module
+def test_delete_route_removes_the_rows_then_every_file_the_run_owned(monkeypatch):
+    """Delete is permanent: the rows go first, then each storage prefix the run owned. A run still in
+    progress is refused, so no task writes into a deleted run."""
+    from fastapi import HTTPException
 
-    calls = []
-    monkeypatch.setattr(app_module.repo, "set_run_archived", lambda run_id, archived: calls.append((run_id, archived)) or True)
-    assert app_module.archive_run("run-1", {"archived": True}) == {"run_id": "run-1", "archived": True}
-    assert app_module.archive_run("run-1", {"archived": False}) == {"run_id": "run-1", "archived": False}
-    assert calls == [("run-1", True), ("run-1", False)]
+    import engine.api.app as app_module
+    from engine.orchestrator import retention
+
+    cleared = []
+
+    class Blobs:
+        def delete_prefix(self, prefix):
+            cleared.append(prefix)
+            return 1
+
+    monkeypatch.setattr(app_module, "make_blob_store", lambda settings: Blobs())
+    monkeypatch.setattr(app_module.repo, "get_run", lambda run_id: {"id": run_id})
+    monkeypatch.setattr(retention.repo, "delete_run", lambda run_id: ["share-bundles/run-1", "snapshots/snap-1"])
+    assert app_module.delete_run("run-1") == {"run_id": "run-1", "deleted": True}
+    assert cleared == ["share-bundles/run-1", "snapshots/snap-1"]
+
+    monkeypatch.setattr(retention.repo, "delete_run", lambda run_id: None)
+    with pytest.raises(HTTPException) as refused:
+        app_module.delete_run("run-2")
+    assert refused.value.status_code == 409
 
 
 def test_progress_while_collecting_shows_real_steps_and_a_feed():
@@ -98,8 +114,8 @@ def test_preview_links_are_signed_expiring_and_page_scoped(settings):
                           {"index": 1, "url": "https://x/old", "annotated_key": "d", "fixed_key": "e",
                            "changes": []}]}
     view = preview.for_workspace(settings, manifest, now=1000)
-    assert set(view["pages"][0]["views"]) == {"original", "annotated", "fixed"}
-    assert set(view["pages"][1]["views"]) == {"annotated", "fixed"}  # bundles built before 'original' existed
+    assert set(view["pages"][0]["views"]) == {"annotated", "fixed"}  # an old bundle's Before copy is no longer offered
+    assert set(view["pages"][1]["views"]) == {"annotated", "fixed"}
     assert not any(k.endswith("_key") for page in view["pages"] for k in page)
     expires = view["links_expire_at"]
     sig = preview.signature(settings, "r1", 0, "fixed", expires)
@@ -132,7 +148,7 @@ def test_preview_page_is_sandboxed_and_rejects_bad_links(client, settings):
     assert client.get(good.replace("sig=", "sig=0")).status_code == 403
     original = f"/api/v1/preview/r1/0/original?exp={expires}&sig=" + preview.signature(settings, "r1", 0, "original",
                                                                                      expires)
-    assert client.get(original).status_code == 404  # this bundle has no original page
+    assert client.get(original).status_code == 403  # the Before view was removed
 
 
 def test_collectors_endpoint_lists_dependencies_in_order(client):

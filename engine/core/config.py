@@ -61,7 +61,7 @@ class Settings(BaseSettings):
 
     # Execution
     deploy_target: Literal["vercel", "local"] = "local"
-    runner: Literal["inline", "worker", "http"] = "inline"
+    runner: Literal["inline", "http"] = "inline"
     app_base_url: str = Field(default_factory=lambda: (
         f"https://{os.environ['VERCEL_URL']}" if os.environ.get("VERCEL_URL") else "http://127.0.0.1:8000"
     ))

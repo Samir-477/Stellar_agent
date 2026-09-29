@@ -71,27 +71,52 @@ def get_run(run_id: str) -> dict | None:
     return run
 
 
+_RUN_CONTEXT_SQL = (
+    "select r.id as run_id, r.snapshot_id, r.crawl_cap, r.token_budget, c.id as client_id, c.name, "
+    "c.primary_url, c.archetype, c.locations, c.competitors "
+    "from runs r join clients c on c.id = r.client_id where r.id=%s")
+_ARCHETYPE_EVIDENCE_SQL = ("select payload from evidence where snapshot_id=%s and type='archetype' "
+                           "order by captured_at desc limit 1")
+_RUN_TASKS_SQL = (
+    "select kind, ref, status, is_barrier, unit, attempts, error, started_at, finished_at, "
+    "case when kind = 'agent.reduce' then (output->>'findings')::int end as findings, "
+    "case when ref = 'C3' then output->'proposal' end as proposal "
+    "from tasks where run_id=%s order by created_at")
+
+
 def run_context(run_id: str) -> dict:
     with connection() as conn:
-        return conn.execute(
-            "select r.id as run_id, r.snapshot_id, r.crawl_cap, r.token_budget, c.id as client_id, c.name, "
-            "c.primary_url, c.archetype, c.locations, c.competitors "
-            "from runs r join clients c on c.id = r.client_id where r.id=%s", (run_id,)).fetchone()
+        return conn.execute(_RUN_CONTEXT_SQL, (run_id,)).fetchone()
 
 
 def run_archetype(ctx: dict) -> str | None:
     """The business type a run's agents used. C3 records it as evidence and agents read it from there
     (engine/agents/common.archetype); a confident detection never reaches the client record, so the
     client record is only the fallback. `ctx` is a run_context row."""
+    with connection() as conn:
+        row = conn.execute(_ARCHETYPE_EVIDENCE_SQL, (ctx["snapshot_id"],)).fetchone()
+    return _archetype_from(row["payload"] if row else {}, ctx)
+
+
+def _archetype_from(found: dict, ctx: dict) -> str | None:
     from engine.collectors.c03_archetype import CONFIRM_THRESHOLD  # C3 imports the queue; avoid a cycle
 
-    with connection() as conn:
-        row = conn.execute("select payload from evidence where snapshot_id=%s and type='archetype' "
-                           "order by captured_at desc limit 1", (ctx["snapshot_id"],)).fetchone()
-    found = row["payload"] if row else {}
     if found.get("archetype") and (found.get("source") == "team" or found.get("confidence", 0) >= CONFIRM_THRESHOLD):
         return found["archetype"]
     return ctx["archetype"]
+
+
+def run_overview(run_id: str) -> dict | None:
+    """Everything the progress view needs, read over one connection: the run, its client context,
+    its tasks (without bulky outputs) and the business type its agents used."""
+    with connection() as conn:
+        run = conn.execute("select * from runs where id=%s", (run_id,)).fetchone()
+        if run is None:
+            return None
+        ctx = conn.execute(_RUN_CONTEXT_SQL, (run_id,)).fetchone()
+        tasks = conn.execute(_RUN_TASKS_SQL, (run_id,)).fetchall()
+        row = conn.execute(_ARCHETYPE_EVIDENCE_SQL, (ctx["snapshot_id"],)).fetchone()
+    return {"run": run, "ctx": ctx, "tasks": tasks, "archetype": _archetype_from(row["payload"] if row else {}, ctx)}
 
 
 def set_run_status(run_id: str, status: str, *, note: str | None = None) -> None:
@@ -237,50 +262,60 @@ def run_tasks(run_id: str) -> list[dict]:
     """Task rows for the progress view, without bulky outputs: only an agent's finding count
     and C3's archetype proposal are read from `output`."""
     with connection() as conn:
-        return conn.execute(
-            "select kind, ref, status, is_barrier, unit, attempts, error, started_at, finished_at, "
-            "case when kind = 'agent.reduce' then (output->>'findings')::int end as findings, "
-            "case when ref = 'C3' then output->'proposal' end as proposal "
-            "from tasks where run_id=%s order by created_at", (run_id,)).fetchall()
+        return conn.execute(_RUN_TASKS_SQL, (run_id,)).fetchall()
 
 
-def list_runs(limit: int = 50, *, archived: bool = False) -> list[dict]:
+def list_runs(limit: int = 50) -> list[dict]:
     """Recent runs with their client, task totals, readiness and priority-lane sizes (one row each)."""
     with connection() as conn:
         return conn.execute(
             "select r.id, r.type, r.agents, r.status, r.note, r.crawl_cap, r.created_at, r.started_at, "
-            "to_jsonb(r)->>'archived_at' as archived_at, "
             "r.finished_at, c.id as client_id, c.name as client_name, c.primary_url, c.archetype, "
-            "t.total as tasks_total, t.done as tasks_done, i.body->'readiness' as readiness, "
-            "case when i.body is not null then jsonb_build_object("
-            "  'now', jsonb_array_length(coalesce(i.body->'what_to_fix_first'->'now', '[]')),"
-            "  'next', jsonb_array_length(coalesce(i.body->'what_to_fix_first'->'next', '[]')),"
-            "  'later', jsonb_array_length(coalesce(i.body->'what_to_fix_first'->'later', '[]')),"
-            "  'investigate', jsonb_array_length(coalesce(i.body->'what_to_fix_first'->'investigate', '[]')),"
-            "  'monitor', jsonb_array_length(coalesce(i.body->'what_to_fix_first'->'monitor', '[]'))) end as lanes "
+            "t.total as tasks_total, t.done as tasks_done, i.readiness, "
+            "case when i.lanes is not null then jsonb_build_object("
+            "  'now', jsonb_array_length(coalesce(i.lanes->'now', '[]')),"
+            "  'next', jsonb_array_length(coalesce(i.lanes->'next', '[]')),"
+            "  'later', jsonb_array_length(coalesce(i.lanes->'later', '[]')),"
+            "  'investigate', jsonb_array_length(coalesce(i.lanes->'investigate', '[]')),"
+            "  'monitor', jsonb_array_length(coalesce(i.lanes->'monitor', '[]'))) end as lanes "
             "from runs r join clients c on c.id = r.client_id "
             "left join lateral (select count(*) as total, count(*) filter (where status in "
             "  ('succeeded','partial','failed','skipped')) as done from tasks where run_id = r.id) t on true "
-            "left join lateral (select body from reports where run_id = r.id and kind = 'intelligence' "
-            "  order by created_at desc limit 1) i on true "
-            "where (to_jsonb(r)->>'archived_at' is not null) = %s "
-            "order by r.created_at desc limit %s", (archived, limit)).fetchall()
+            "left join lateral (select body->'readiness' as readiness, body->'what_to_fix_first' as lanes "
+            "  from reports where run_id = r.id and kind = 'intelligence' order by created_at desc limit 1) i on true "
+            "order by r.created_at desc limit %s", (limit,)).fetchall()
 
 
-def set_run_archived(run_id: str, archived: bool) -> bool:
-    """Only finished runs can be hidden; a running diagnosis must remain visible."""
+ACTIVE_RUN_STATES = ("queued", "running")
+
+
+def delete_run(run_id: str) -> list[str] | None:
+    """Delete a run for good, with everything only it owns: its tasks, findings, patches, reports and
+    microsites (by cascade), its snapshot when no other run shares it, and its client when this was the
+    client's last run. Returns the storage prefixes to clear, or None when the run doesn't exist or is
+    still in progress."""
     with connection() as conn:
-        ready = conn.execute(
-            "select 1 from information_schema.columns "
-            "where table_name='runs' and column_name='archived_at'"
-        ).fetchone()
-        if not ready:
-            raise RuntimeError("Run archive needs migration 0005_run_archive.sql before Hide or Restore can be used.")
-        row = conn.execute(
-            "update runs set archived_at=case when %s then now() else null end "
-            "where id=%s and status in ('completed','completed_partial','failed','cancelled') "
-            "returning id", (archived, run_id)).fetchone()
-    return row is not None
+        run = conn.execute("select id, status, snapshot_id, client_id from runs where id=%s for update",
+                           (run_id,)).fetchone()
+        if run is None or run["status"] in ACTIVE_RUN_STATES:
+            return None
+        prefixes = [f"share-bundles/{run_id}"] + [
+            f"share-bundles/microsites/{row['id']}"
+            for row in conn.execute("select id from microsites where run_id=%s", (run_id,)).fetchall()]
+        conn.execute("delete from runs where id=%s", (run_id,))
+        client_left = conn.execute("select exists (select 1 from runs where client_id=%s) as used",
+                                   (run["client_id"],)).fetchone()["used"]
+        # Snapshots no remaining run reads: this run's, or every one of the client's when the client goes too.
+        orphans = conn.execute(
+            "select id from snapshots s where (s.id=%s or (not %s and s.client_id=%s)) "
+            "and not exists (select 1 from runs r where r.snapshot_id = s.id)",
+            (run["snapshot_id"], client_left, run["client_id"])).fetchall()
+        for row in orphans:
+            conn.execute("delete from snapshots where id=%s", (row["id"],))
+            prefixes.append(f"snapshots/{row['id']}")
+        if not client_left:
+            conn.execute("delete from clients where id=%s", (run["client_id"],))
+    return prefixes
 
 
 def run_has_open_tasks(run_id: str) -> dict:
@@ -366,7 +401,7 @@ def insert_microsite(record: dict) -> dict:
             f"values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning {MICROSITE_LIST_COLUMNS}",
             (record["id"], record["client_id"], record["run_id"], record["archetype"], record["client_slug"],
              record["page_path"], record["client_name"], record["source_url"], record["page_title"],
-             record["fixed_key"], record["annotated_key"], record["original_key"], json(record["issues"]),
+             record["fixed_key"], record["annotated_key"], record.get("original_key"), json(record["issues"]),
              record["changes_placed"], record["changes_total"], record["published_by"])).fetchone()
 
 

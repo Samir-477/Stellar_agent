@@ -21,7 +21,7 @@ from engine.core.blobstore import BlobStore
 from engine.core.config import Settings
 
 PREVIEW_TTL_S = 3600
-VARIANTS = ("original", "annotated", "fixed")
+VARIANTS = ("annotated", "fixed")
 _PROCESS_SECRET = secrets.token_hex(32)  # local development without a configured secret
 
 

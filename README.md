@@ -5,7 +5,7 @@ Crawls a client website, runs independent SEO, AEO and GEO diagnosis agents over
 | Part | Where | Runtime |
 |---|---|---|
 | Engine (API, orchestrator, collectors, agents) | `engine/`, entry `api/index.py` | Python 3.12, FastAPI |
-| Dashboard, share viewer, landing page | `src/` | Next.js 16 |
+| Workspace (Sessions, run layers, Microsites) and the public microsite pages | `src/` | Next.js 16 |
 | Database schema | `supabase/migrations/` | Postgres 17 (Supabase) |
 
 ## Engine: local development
@@ -28,7 +28,7 @@ Settings come from `.env` (see `.env.example`). Keep `LLM_MODE=off` or `replay` 
 |---|---|
 | `engine/collectors/` | Gather evidence (C1 crawler, C2 parser, …). Never judge. |
 | `engine/agents/` | Judge evidence (S1, …). Read only the snapshot, never other agents. |
-| `engine/orchestrator/` | Task graph, Postgres task queue with leases, runners (`inline`, `worker`, `http`) |
+| `engine/orchestrator/` | Task graph, Postgres task queue with leases, runners (`inline` for local runs, `http` on Vercel) |
 | `engine/llm/` | DeepSeek → Groq client, versioned prompts in `prompt_files/`, cache, budget |
 | `engine/store.py`, `engine/core/blobstore.py` | Evidence rows + gzip'd files (Supabase Storage or local disk) |
 | `engine/validation.py`, `engine/reports.py` | Validation gate; 6-section agent reports |

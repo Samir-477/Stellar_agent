@@ -51,7 +51,6 @@ export type RunSummary = {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
-  archived_at: string | null;
   client_id: string;
   client_name: string;
   primary_url: string;
@@ -209,16 +208,15 @@ export type Preview = {
   entry_url: string;
   captured_at: string;
   built_at: string;
-  include_proposed: boolean;
   pages: {
     index: number;
     url: string;
-    views: Partial<Record<"original" | "annotated" | "fixed", string>>;
+    views: Partial<Record<"annotated" | "fixed", string>>;
     changes: PreviewChange[];
     not_placed: { key: string; reason: string }[];
     under_the_hood: HoodItem[];
   }[];
-  site_files: { key: string; type: string; before: string | null; after: string; why: string; note: string; title: string }[];
+  issues?: MicrositeIssue[]; // the diagnosed page's issues, fixed first (absent in previews built before 2026-09-29)
   links_expire_at: number;
 };
 

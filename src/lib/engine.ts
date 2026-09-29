@@ -1,6 +1,6 @@
 import "server-only";
 import type {
-  AgentInfo, AgentReport, Client, CollectorInfo, IntelligenceReport, IssueCard, MicrositeIssue, MicrositeLive, MicrositeSummary, Preview,
+  AgentInfo, AgentReport, Client, CollectorInfo, IntelligenceReport, IssueCard, MicrositeLive, MicrositeSummary, Preview,
   Progress, RunSummary,
 } from "@/lib/types";
 
@@ -44,7 +44,8 @@ export async function send(path: string, init: RequestInit = {}): Promise<Respon
   if (init.body) headers.set("Content-Type", "application/json");
   let response: Response;
   try {
-    response = await fetch(`${BASE}/api/v1${path}`, { ...init, headers, cache: "no-store" });
+    // Live data is never cached; calls that pass `next.revalidate` (the static catalog) are.
+    response = await fetch(`${BASE}/api/v1${path}`, { ...init, headers, ...(init.next ? {} : { cache: "no-store" as const }) });
   } catch {
     throw new EngineError(503, `The diagnosis engine isn't reachable at ${BASE}. Start it, then reload this page.`);
   }
@@ -78,10 +79,11 @@ async function optional<T>(promise: Promise<T>): Promise<T | null> {
 }
 
 export const engine = {
-  agents: () => call<AgentInfo[]>("/agents"),
-  collectors: () => call<CollectorInfo[]>("/collectors"),
-  runs: (limit = 50, archived = false) => call<RunSummary[]>(`/runs?limit=${limit}&archived=${archived}`),
-  archiveRun: (runId: string, archived: boolean) => call<{ run_id: string; archived: boolean }>(runPath(runId, "/archive"), { method: "PATCH", body: JSON.stringify({ archived }) }),
+  // The agent and collector catalog only changes with a deploy, so it is cached for an hour.
+  agents: () => call<AgentInfo[]>("/agents", { next: { revalidate: 3600 } }),
+  collectors: () => call<CollectorInfo[]>("/collectors", { next: { revalidate: 3600 } }),
+  runs: (limit = 50) => call<RunSummary[]>(`/runs?limit=${limit}`),
+  deleteRun: (runId: string) => call<{ run_id: string; deleted: boolean }>(runPath(runId), { method: "DELETE" }),
   progress: (runId: string) => call<Progress>(runPath(runId, "/progress")),
   report: (runId: string) => optional(call<IntelligenceReport>(runPath(runId, "/report"))),
   agentReports: (runId: string) => call<Record<string, AgentReport>>(runPath(runId, "/agents")),
@@ -90,8 +92,6 @@ export const engine = {
     return optional(call<AgentReport>(runPath(runId, `/agents/${agentId}`)));
   },
   issues: (runId: string) => call<{ issues: IssueCard[] }>(runPath(runId, "/issues")).then((r) => r.issues),
-  /** The diagnosed page's issues, fixed first, as a microsite of the run lists them. */
-  pageIssues: (runId: string) => call<{ issues: MicrositeIssue[] }>(runPath(runId, "/page-issues")).then((r) => r.issues),
   publishMicrosite: (runId: string, body: { client_slug?: string; published_by?: string }) =>
     call<MicrositeSummary>(runPath(runId, "/microsite"), { method: "POST", body: JSON.stringify(body) }),
   microsites: () => call<MicrositeSummary[]>("/microsites"),
@@ -103,7 +103,7 @@ export const engine = {
     if (!isMicrositeSlug(parts)) throw new EngineError(404, "microsite not found");
     return optional(call<MicrositeLive>(`/microsites/live?slug=${encodeURIComponent(parts.join("/"))}`));
   },
-  liveMicrositeHtml: (parts: string[], view: "fixed" | "annotated" | "original") => {
+  liveMicrositeHtml: (parts: string[], view: "fixed" | "annotated") => {
     if (!isMicrositeSlug(parts)) throw new EngineError(404, "microsite not found");
     return send(`/microsites/live/html?slug=${encodeURIComponent(parts.join("/"))}&view=${view}`);
   },

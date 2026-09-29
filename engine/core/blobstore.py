@@ -78,18 +78,28 @@ class SupabaseBlobStore:
         resp.raise_for_status()
         return gzip.decompress(resp.content)
 
+    def _files_under(self, bucket: str, folder: str) -> list[str]:
+        """Every object below a folder. Storage lists one level at a time: folders come back without an id."""
+        files: list[str] = []
+        offset = 0
+        while True:
+            listed = self.client.post(f"{self.base}/object/list/{bucket}", headers=self.headers,
+                                      json={"prefix": folder, "limit": 1000, "offset": offset})
+            listed.raise_for_status()
+            items = listed.json()
+            for item in items:
+                path = f"{folder.rstrip('/')}/{item['name']}"
+                files.extend([path] if item.get("id") else self._files_under(bucket, path))
+            if len(items) < 1000:
+                return files
+            offset += len(items)
+
     def delete_prefix(self, prefix: str) -> int:
         bucket, _, path = prefix.partition("/")
-        listed = self.client.post(
-            f"{self.base}/object/list/{bucket}",
-            headers=self.headers,
-            json={"prefix": path, "limit": 1000},
-        )
-        listed.raise_for_status()
-        names = [f"{path.rstrip('/')}/{item['name']}" for item in listed.json() if item.get("id")]
-        if names:
+        names = self._files_under(bucket, path)
+        for start in range(0, len(names), 1000):
             self.client.request("DELETE", f"{self.base}/object/{bucket}", headers=self.headers,
-                                json={"prefixes": names}).raise_for_status()
+                                json={"prefixes": names[start:start + 1000]}).raise_for_status()
         return len(names)
 
 

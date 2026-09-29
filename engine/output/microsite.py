@@ -1,8 +1,8 @@
 """Microsites (user decision, 2026-09-28): once the Output preview of a run's diagnosed URL is
 approved, the fixed page is published at /microsites/{archetype}/{client_slug}/{page_path}.
 
-A microsite is one immutable version: the fixed page, the page with every change marked, the
-original, and the issues found on that page with their before/after code. Publishing the same
+A microsite is one immutable version: the fixed page, the page with every change marked, and
+the issues found on that page with their before/after code. Publishing the same
 slug again supersedes the live version; history is kept. The Next.js app serves it publicly with
 noindex (it copies the client's own page, so it must never compete with it in search).
 """
@@ -11,25 +11,20 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from lxml import html as lxml_html
 
 from engine.core.blobstore import BlobStore
-from engine.issues import build_issue_cards
-from engine.lib.urls import norm
 from engine.orchestrator import repo
-from engine.output.diffs import page_snippets
-from engine.output.patcher import PlacementResult, apply
+from engine.output.page_review import ReviewError, review_entry_page
 from engine.store import Store
 
 ARCHETYPES = ("hospitality", "loans", "retail", "logistics")
 SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-MAX_ISSUES = 40
 
 
-class MicrositeError(ValueError):
+class MicrositeError(ReviewError):
     """A run that can't be published yet, with a reason a person can act on."""
 
 
@@ -48,70 +43,10 @@ def slug_of(archetype: str, client_slug: str, path: str) -> str:
     return f"{archetype}/{client_slug}/{path}"
 
 
-def _page_for(store: Store, snapshot_id: str, url: str):
-    target = norm(url)
-    return next((p for p in store.list_pages(snapshot_id) if target in (norm(p.url), norm(p.final_url or p.url))), None)
-
-
-@dataclass
-class PageReview:
-    """The diagnosed page with its proposed changes applied, and the issues found on it."""
-    ctx: dict
-    raw: str
-    patches: list[dict]
-    result: PlacementResult
-    original_html: str
-    issues: list[dict]  # fixed first; observations left out
-
-
-def review_entry_page(run_id: str, store: Store, blobs: BlobStore) -> PageReview:
-    """What a microsite shows, computed from the captured page: the Output layer's technical column
-    reads the same list, so the workspace and the published page never disagree."""
-    run = repo.get_run(run_id)
-    if run is None:
-        raise MicrositeError("Run not found.")
-    if run["status"] not in ("completed", "completed_partial"):
-        raise MicrositeError("The run hasn't finished yet.")
-    ctx = repo.run_context(run_id)
-    url = ctx["primary_url"]
-    page = _page_for(store, str(run["snapshot_id"]), url)
-    if page is None or not page.raw_html_key:
-        raise MicrositeError("The diagnosed page wasn't captured in this run.")
-    try:
-        raw = blobs.get(page.raw_html_key).decode("utf-8", errors="replace")
-    except Exception as exc:  # noqa: BLE001 - storage errors differ by backend
-        raise MicrositeError("The captured page isn't in this engine's storage.") from exc
-
-    page_urls = {norm(page.url), norm(page.final_url or page.url)}
-    patches = [p for p in repo.list_patches(run_id) if p.get("page_url") and norm(p["page_url"]) in page_urls]
-    findings = repo.list_findings(run_id)
-    titles = {key: f["title"] for f in findings for key in f.get("patch_keys", [])}
-    for patch in patches:
-        patch["title"] = titles.get(patch["key"], "Suggested change")
-    base = page.final_url or page.url
-    result = apply(raw, base, patches)
-    snippets = page_snippets(raw, patches)
-
-    cards = []
-    for card in build_issue_cards(findings, patches, snippets):
-        on_page = any(norm(p) in page_urls for p in card["pages"]) or bool(card["changes"])
-        if not on_page or card["fix_type"] == "observation":
-            continue
-        changes = [c for c in card["changes"] if c["page_url"] and norm(c["page_url"]) in page_urls]
-        cards.append({k: card[k] for k in ("agent_id", "agent_name", "check_id", "status", "severity", "title",
-                                           "impact", "fix", "fix_type")}
-                     | {"fixed": any(c["key"] in result.placed for c in changes),
-                        "changes": [{k: c[k] for k in ("type", "language", "before", "after", "before_segments",
-                                                       "after_segments", "note")} for c in changes]})
-    cards.sort(key=lambda c: not c["fixed"])
-    return PageReview(ctx=ctx, raw=raw, patches=patches, result=result,
-                      original_html=apply(raw, base, []).fixed_html, issues=cards)
-
-
 def build_microsite(run_id: str, store: Store, blobs: BlobStore, *, client_slug: str | None = None,
                     published_by: str | None = None) -> dict:
     review = review_entry_page(run_id, store, blobs)
-    ctx, raw, patches, result, original = review.ctx, review.raw, review.patches, review.result, review.original_html
+    ctx, raw, patches, result = review.ctx, review.raw, review.patches, review.result
     archetype = repo.run_archetype(ctx)
     if archetype not in ARCHETYPES:
         raise MicrositeError("Confirm the business type for this client before publishing.")
@@ -130,8 +65,7 @@ def build_microsite(run_id: str, store: Store, blobs: BlobStore, *, client_slug:
         "page_title": title,
         "fixed_key": blobs.put(f"{prefix}/fixed.html", result.fixed_html.encode("utf-8")),
         "annotated_key": blobs.put(f"{prefix}/annotated.html", result.annotated_html.encode("utf-8")),
-        "original_key": blobs.put(f"{prefix}/original.html", original.encode("utf-8")),
-        "issues": cards[:MAX_ISSUES], "changes_placed": len(result.placed), "changes_total": len(patches),
+        "issues": cards, "changes_placed": len(result.placed), "changes_total": len(patches),
         "published_by": published_by,
     }
     return repo.insert_microsite(record)

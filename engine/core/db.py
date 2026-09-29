@@ -7,6 +7,7 @@ prepare_threshold=None keeps it compatible with Supabase's transaction pooler.
 
 from __future__ import annotations
 
+import time
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -18,6 +19,15 @@ from psycopg_pool import ConnectionPool
 from engine.core.config import get_settings
 
 _pool: ConnectionPool | None = None
+RECENT_S = 20.0  # a connection used this recently is still open; skip the extra round trip that tests it
+_last_used: dict[int, float] = {}
+
+
+def _check(conn: Connection) -> None:
+    """Supabase's pooler drops idle connections, so test one before reuse, unless it was just used."""
+    if time.monotonic() - _last_used.get(id(conn), 0.0) < RECENT_S:
+        return
+    ConnectionPool.check_connection(conn)
 
 
 def _get_pool() -> ConnectionPool:
@@ -32,7 +42,7 @@ def _get_pool() -> ConnectionPool:
             max_size=5,
             kwargs={"prepare_threshold": None, "row_factory": dict_row, "connect_timeout": 15},
             # Supabase's pooler drops idle connections: test each one before use and retire idle ones early.
-            check=ConnectionPool.check_connection,
+            check=_check,
             max_idle=120,
             open=True,
         )
@@ -44,6 +54,7 @@ def connection() -> Iterator[Connection]:
     """A pooled connection; commits on success, rolls back on error."""
     with _get_pool().connection() as conn:
         yield conn
+        _last_used[id(conn)] = time.monotonic()
 
 
 def json(value: Any) -> Jsonb:

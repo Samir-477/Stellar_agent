@@ -1,7 +1,6 @@
 """Runners call the same `execute_task` in different environments (docs/spec/10):
 
   inline  local development: execute a run's tasks in this process until it finishes
-  worker  self-hosted: a long-running loop pulling from the task queue
   http    Vercel: dispatch claims tasks and invokes one function call per task
 """
 
@@ -11,7 +10,6 @@ import hashlib
 import hmac
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
@@ -77,18 +75,6 @@ def run_inline(run_id: str, env: Env | None = None, *, max_seconds: float = 1800
             break
         time.sleep(1)  # waiting for a retry backoff
     return repo.get_run(run_id)
-
-
-def worker_loop(env: Env | None = None, *, concurrency: int = 4, idle_sleep: float = 1.0) -> None:
-    """Long-running worker for self-hosting (RUNNER=worker)."""
-    env = env or make_env()
-    with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        while True:
-            tasks = _claim(env, concurrency, None)
-            if not tasks:
-                time.sleep(idle_sleep)
-                continue
-            list(pool.map(lambda t: _execute_safely(t, env), tasks))
 
 
 # ------------------------------------------------------------ http (Vercel)

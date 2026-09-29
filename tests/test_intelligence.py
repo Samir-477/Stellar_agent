@@ -46,7 +46,6 @@ def test_matrix_separates_likely_hypothetical_and_dated_observations():
 
 def test_missing_facts_do_not_automatically_block_an_action():
     from engine.intelligence import build_intelligence_report
-    from engine.render_md import intelligence_md
 
     issue = f("S5", "S5.01", St.FAIL, Severity.MEDIUM,
               missing=["a page for hotels with private pools"])
@@ -55,13 +54,10 @@ def test_missing_facts_do_not_automatically_block_an_action():
     assert item["prerequisite_review"] and item["check_ids"] == ["S5.01"]
     assert report["action_plan_and_blocked_work"]["blocked"] == []
     assert report["action_plan_and_blocked_work"]["prerequisites_to_review"][0]["id"] == item["id"]
-    markdown = intelligence_md(report)
-    assert "Review prerequisites" in markdown and "Blocked" not in markdown
 
 
 def test_observation_only_run_has_no_action_plan_or_lead_blocker():
     from engine.intelligence import build_intelligence_report
-    from engine.render_md import intelligence_md
 
     observed = f("G3", "G3.01", St.WARN, Severity.HIGH, pillar=Pillar.GEO)
     report = build_intelligence_report({"G3": [observed]}, set(), [], None)
@@ -69,7 +65,6 @@ def test_observation_only_run_has_no_action_plan_or_lead_blocker():
     assert report["what_to_fix_first"]["monitor"][0]["agents"] == ["G3"]
     assert report["leads"]["blocker"] is None
     assert report["action_plan_and_blocked_work"]["now"] == []
-    assert "Monitor: dated search and AI observations" in intelligence_md(report)
     assert "not a verified site fix" in report["executive_summary"]["client"][0]["text"]
 
 

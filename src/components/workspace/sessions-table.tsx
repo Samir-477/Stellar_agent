@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { RotateCcw, Search, Trash2 } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Pager, usePaged } from "@/components/workspace/pager";
 import { RunStatusLabel, isFinished } from "@/components/workspace/run-status";
@@ -46,36 +46,30 @@ function ScoreCell({ run }: { run: RunSummary }) {
 }
 
 /** Run history as a table: the rows are comparable, so they line up in columns. */
-export function SessionsTable({ runs, archived }: { runs: RunSummary[]; archived: RunSummary[] }) {
-  const [activeRuns, setActiveRuns] = useState(runs);
-  const [hiddenRuns, setHiddenRuns] = useState(archived);
-  const [view, setView] = useState<"active" | "archived">("active");
+export function SessionsTable({ runs }: { runs: RunSummary[] }) {
+  const [rows, setRows] = useState(runs);
   const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const source = view === "active" ? activeRuns : hiddenRuns;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return source.filter((r) => (view === "archived" || matches(r, filter)) && (!q || r.client_name.toLowerCase().includes(q) || r.primary_url.toLowerCase().includes(q)));
-  }, [source, query, filter, view]);
+    return rows.filter((r) => matches(r, filter) && (!q || r.client_name.toLowerCase().includes(q) || r.primary_url.toLowerCase().includes(q)));
+  }, [rows, query, filter]);
   const paged = usePaged(shown, 10);
 
-  async function changeArchive(run: RunSummary, archive: boolean) {
+  async function remove(run: RunSummary) {
     setBusy(run.id);
     setError("");
     try {
-      const response = await fetch(`/api/workspace/runs/${run.id}/archive`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: archive }),
-      });
+      const response = await fetch(`/api/workspace/runs/${run.id}`, { method: "DELETE" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Couldn't update the run.");
-      setActiveRuns((rows) => archive ? rows.filter((r) => r.id !== run.id) : [run, ...rows].sort((a, b) => b.created_at.localeCompare(a.created_at)));
-      setHiddenRuns((rows) => archive ? [run, ...rows].sort((a, b) => b.created_at.localeCompare(a.created_at)) : rows.filter((r) => r.id !== run.id));
+      if (!response.ok) throw new Error(data.error || "Couldn't delete the run.");
+      setRows((current) => current.filter((r) => r.id !== run.id));
       setPending(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Couldn't update the run.");
+      setError(cause instanceof Error ? cause.message : "Couldn't delete the run.");
     } finally {
       setBusy(null);
     }
@@ -83,10 +77,6 @@ export function SessionsTable({ runs, archived }: { runs: RunSummary[]; archived
 
   return (
     <div className="mt-12">
-      <div className="mb-5 flex gap-2" role="group" aria-label="Session visibility">
-        <button type="button" aria-pressed={view === "active"} onClick={() => { setView("active"); paged.setPage(0); }} className={`min-h-11 rounded-[3px] px-4 text-sm font-semibold ${view === "active" ? "bg-ink text-white" : "border border-rule text-ink-2"}`}>Current {activeRuns.length}</button>
-        <button type="button" aria-pressed={view === "archived"} onClick={() => { setView("archived"); paged.setPage(0); }} className={`min-h-11 rounded-[3px] px-4 text-sm font-semibold ${view === "archived" ? "bg-ink text-white" : "border border-rule text-ink-2"}`}>Hidden {hiddenRuns.length}</button>
-      </div>
       <div className="flex flex-wrap items-center gap-3">
         <label className="relative min-w-[240px] flex-1 sm:max-w-[380px]">
           <span className="sr-only">Search by client or page</span>
@@ -94,15 +84,15 @@ export function SessionsTable({ runs, archived }: { runs: RunSummary[]; archived
           <input type="search" value={query} onChange={(e) => { setQuery(e.target.value); paged.setPage(0); }} placeholder="Search by client or page"
                  className="min-h-11 w-full rounded-[3px] border border-rule-strong bg-paper pr-3 pl-9 text-base outline-none placeholder:text-ink-3 focus-visible:border-signal focus-visible:shadow-[0_0_0_3px_#d6f2df]" />
         </label>
-        {view === "active" && <div role="group" aria-label="Status" className="flex flex-wrap border border-rule-strong">
+        <div role="group" aria-label="Status" className="flex flex-wrap border border-rule-strong">
           {FILTERS.map((f) => (
             <button key={f.id} type="button" aria-pressed={filter === f.id} onClick={() => { setFilter(f.id); paged.setPage(0); }}
                     className={`min-h-11 px-3.5 text-sm font-medium transition-colors [&+&]:border-l [&+&]:border-rule-strong ${filter === f.id ? "bg-ink text-white" : "text-ink-2 hover:bg-mist"}`}>
               {f.label}
             </button>
           ))}
-        </div>}
-        <p className="ml-auto text-sm text-ink-3" aria-live="polite">{shown.length} of {source.length} runs</p>
+        </div>
+        <p className="ml-auto text-sm text-ink-3" aria-live="polite">{shown.length} of {rows.length} runs</p>
       </div>
       {error && <p className="mt-4 border-l-[3px] border-red bg-red-bg px-4 py-3 text-sm text-red" role="alert">{error}</p>}
       <div className="mt-5"><Pager page={paged.page} pages={paged.pages} total={paged.total} size={paged.size} onPage={paged.setPage} noun="runs" /></div>
@@ -138,13 +128,9 @@ export function SessionsTable({ runs, archived }: { runs: RunSummary[]; archived
                     </>
                   ) : <span className="text-ink-3">None</span>}
                 </span>
-                {view === "active" ? (
-                  <button type="button" onClick={() => setPending(run.id)} disabled={!isFinished(run.status) || busy === run.id} aria-label={`Hide ${run.client_name} run`} title={isFinished(run.status) ? "Hide run" : "A run can be hidden after it finishes"} className="flex min-h-11 items-center justify-center gap-1.5 rounded-[3px] px-2 text-xs text-ink-3 hover:bg-red-bg hover:text-red disabled:opacity-30"><Trash2 size={15} />Hide</button>
-                ) : (
-                  <button type="button" onClick={() => changeArchive(run, false)} disabled={busy === run.id} aria-label={`Restore ${run.client_name} run`} title="Restore run" className="flex min-h-11 items-center justify-center gap-1.5 rounded-[3px] px-2 text-xs text-signal hover:bg-soft disabled:opacity-50"><RotateCcw size={15} />Restore</button>
-                )}
+                <button type="button" onClick={() => setPending(run.id)} disabled={!isFinished(run.status) || busy === run.id} aria-label={`Delete ${run.client_name} run`} title={isFinished(run.status) ? "Delete run" : "A run can be deleted after it finishes"} className="flex min-h-11 items-center justify-center gap-1.5 rounded-[3px] px-2 text-xs text-ink-3 hover:bg-red-bg hover:text-red disabled:opacity-30"><Trash2 size={15} />Delete</button>
               </div>
-              {pending === run.id && <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rule bg-amber-bg px-4 py-4 text-sm"><p>Hide this run from Sessions? Its reports and preview stay available and you can restore it from Hidden.</p><div className="flex gap-2"><button type="button" onClick={() => setPending(null)} className="min-h-10 rounded-[3px] border border-rule-strong bg-paper px-4">Cancel</button><button type="button" onClick={() => changeArchive(run, true)} disabled={busy === run.id} className="min-h-10 rounded-[3px] bg-ink px-4 font-semibold text-white disabled:opacity-50">{busy === run.id ? "Hiding…" : "Hide run"}</button></div></div>}
+              {pending === run.id && <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rule bg-red-bg px-4 py-4 text-sm"><p>Delete this run for good? Its reports, preview and any microsites made from it are removed. This can&apos;t be undone.</p><div className="flex gap-2"><button type="button" onClick={() => setPending(null)} className="min-h-10 rounded-[3px] border border-rule-strong bg-paper px-4">Cancel</button><button type="button" onClick={() => remove(run)} disabled={busy === run.id} className="min-h-10 rounded-[3px] bg-red px-4 font-semibold text-white disabled:opacity-50">{busy === run.id ? "Deleting…" : "Delete run"}</button></div></div>}
             </li>
           ))}
         </ul>
