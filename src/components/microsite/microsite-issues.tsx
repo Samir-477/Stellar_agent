@@ -1,11 +1,13 @@
 "use client";
 
-import { Check, ChevronDown, CircleDashed } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, CircleDashed } from "lucide-react";
 import { useState } from "react";
 import { CodeDiff } from "@/components/workspace/code-diff";
+import { PlainExplanation, TermsUsed } from "@/components/workspace/plain-explanation";
 import type { MicrositeIssue } from "@/lib/types";
 
 function IssueItem({ issue, open, onToggle, wide }: { issue: MicrositeIssue; open: boolean; onToggle: () => void; wide: boolean }) {
+  const plain = issue.plain;
   return (
     <li className="border-b border-rule last:border-b-0">
       <button type="button" onClick={onToggle} aria-expanded={open}
@@ -14,26 +16,48 @@ function IssueItem({ issue, open, onToggle, wide }: { issue: MicrositeIssue; ope
           ? <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-signal text-white"><Check aria-hidden="true" size={12} strokeWidth={3} /></span>
           : <CircleDashed aria-hidden="true" size={20} className="mt-0.5 text-amber" />}
         <span>
-          <span className="block text-sm leading-snug font-semibold">{issue.title}</span>
+          <span className="block text-sm leading-snug font-semibold">{plain?.problem ?? issue.title}</span>
           <span className="mt-1 block text-2xs text-ink-3">Found by {issue.agent_name}</span>
         </span>
         <ChevronDown aria-hidden="true" size={16} className={`mt-1 text-ink-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="space-y-4 px-5 pb-6 pl-[54px] text-sm leading-relaxed">
-          {issue.impact && <p><span className="font-semibold text-ink">Why it matters: </span><span className="text-ink-2">{issue.impact}</span></p>}
-          <p><span className="font-semibold text-ink">{issue.fixed ? "What we changed: " : "What to do: "}</span><span className="text-ink-2">{issue.fix}</span></p>
-          {issue.changes.map((change, i) => (
-            <div key={i} className="space-y-2">
-              <CodeDiff before={change.before} after={change.after} beforeSegments={change.before_segments}
-                        afterSegments={change.after_segments} language={change.language} compact={!wide} />
-              {change.note && <p className="text-xs text-ink-3">{change.note}</p>}
-            </div>
-          ))}
+          {plain ? (
+            <PlainExplanation plain={issue.fixed ? { ...plain, action: `Done in this preview: ${lowerFirst(plain.action)}` } : plain} compact />
+          ) : (
+            <>
+              {issue.impact && <p><span className="font-semibold text-ink">Why it matters: </span><span className="text-ink-2">{issue.impact}</span></p>}
+              <p><span className="font-semibold text-ink">{issue.fixed ? "What we changed: " : "What to do: "}</span><span className="text-ink-2">{issue.fix}</span></p>
+            </>
+          )}
+          {(plain || issue.changes.length > 0) && (
+            <details className="group [&_summary::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-ink">
+                <ChevronRight aria-hidden="true" size={15} className="text-ink-3 transition-transform group-open:rotate-90" />
+                Technical details
+              </summary>
+              <div className="mt-3 space-y-4">
+                {plain && <p className="text-ink-2"><span className="font-semibold text-ink">{issue.title}. </span>{issue.fix}</p>}
+                {issue.changes.map((change, i) => (
+                  <div key={i} className="space-y-2">
+                    <CodeDiff before={change.before} after={change.after} beforeSegments={change.before_segments}
+                              afterSegments={change.after_segments} language={change.language} compact={!wide} />
+                    {change.note && <p className="text-xs text-ink-3">{change.note}</p>}
+                  </div>
+                ))}
+                {plain && plain.terms.length > 0 && <TermsUsed terms={plain.terms} />}
+              </div>
+            </details>
+          )}
         </div>
       )}
     </li>
   );
+}
+
+function lowerFirst(text: string): string {
+  return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
 }
 
 /** The issues on this page: the ones fixed in this preview first, then the ones still to do. `wide` gives the

@@ -124,10 +124,14 @@ class Finding(BaseModel):
 
     @property
     def fingerprint(self) -> str:
-        pages = ",".join(sorted(self.scope.pages))
-        target = self.locator.css if self.locator and self.locator.css else ""
-        raw = f"{self.check_id}|{self.scope.template_id or pages}|{target}"
-        return hashlib.sha1(raw.encode()).hexdigest()[:16]
+        return fingerprint_of(self.check_id, self.scope.pages, self.scope.template_id,
+                              self.locator.css if self.locator else None)
+
+
+def fingerprint_of(check_id: str, pages: list[str], template_id: str | None = None, css: str | None = None) -> str:
+    """A finding's identity: the check, where it applies, and the element it targets."""
+    raw = f"{check_id}|{template_id or ','.join(sorted(pages))}|{css or ''}"
+    return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
 class PatchType(StrEnum):

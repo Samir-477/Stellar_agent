@@ -6,7 +6,7 @@ import { AgentIcon } from "@/components/workspace/icons";
 import { IssueList } from "@/components/workspace/issue-list";
 import { CheckLabel } from "@/components/workspace/status";
 import { plural, urlPath } from "@/lib/format";
-import type { AgentReport, IssueCard, ReportIssue } from "@/lib/types";
+import type { AgentReport, IssueCard, PlainEntry, ReportIssue } from "@/lib/types";
 
 // One agent's own findings, with no cross-agent synthesis: what it is responsible for, its verdict,
 // each issue with evidence, proposed fix and before/after code, what it collected, and what passed.
@@ -148,7 +148,29 @@ function uncheckedOf(report: AgentReport): { check_id: string; title: string; re
   return report.could_not_check ?? report.needs_attention.filter((i) => status[i.check_id] === "unverifiable");
 }
 
-export function AgentReportView({ report, question, issues }: { report: AgentReport; question?: string; issues?: IssueCard[] }) {
+/** The agent's verdict in plain words: the counts, then the most serious issue as management would say it. */
+function plainVerdict(report: AgentReport, cards: IssueCard[]): string {
+  const top = cards.find((c) => c.status === "fail") ?? cards[0];
+  if (!top?.plain) return report.verdict;
+  const { fail = 0, warn = 0 } = report.scorecard;
+  const total = Object.values(report.scorecard).reduce((sum, n) => sum + n, 0);
+  const counts = fail ? `${fail} of ${total} checks fail` : `No check fails; ${warn} of ${total} need attention`;
+  return `${counts}. The most serious: ${top.plain.problem.charAt(0).toLowerCase()}${top.plain.problem.slice(1)}.`;
+}
+
+/** A check's plain name for management, with the technical title beside it when there is one. */
+function CheckName({ checkId, title, plain }: { checkId: string; title: string; plain?: PlainEntry | null }) {
+  return plain ? (
+    <span>
+      <span className="block">{plain.name}</span>
+      <span className="block text-xs text-ink-3"><span className="mr-1.5 font-mono text-2xs text-signal">{checkId}</span>{title}</span>
+    </span>
+  ) : <span><span className="mr-1.5 font-mono text-2xs text-ink-3">{checkId}</span>{title}</span>;
+}
+
+export function AgentReportView({ report, question, issues, plainByCheck = {} }: {
+  report: AgentReport; question?: string; issues?: IssueCard[]; plainByCheck?: Record<string, PlainEntry | null | undefined>;
+}) {
   const cards = issues ?? cardsFromReport(report);
   const [section, setSection] = useState<"issues" | "collected" | "passed">("issues");
   const scope = report.scope_and_evidence;
@@ -172,7 +194,7 @@ export function AgentReportView({ report, question, issues }: { report: AgentRep
             <Scorecard scorecard={report.scorecard} />
           </div>
         </div>
-        <p className="mt-6 border-l-[3px] border-signal bg-mist px-5 py-3.5 text-base leading-relaxed text-ink">{report.verdict}</p>
+        <p className="mt-6 border-l-[3px] border-signal bg-mist px-5 py-3.5 text-base leading-relaxed text-ink">{plainVerdict(report, cards)}</p>
       </header>
 
       <div role="tablist" aria-label="Report sections" className="mt-8 flex flex-wrap gap-2 border-b border-rule pb-3">
@@ -201,8 +223,8 @@ export function AgentReportView({ report, question, issues }: { report: AgentRep
               <ul className="space-y-2 px-5 pb-5 pl-12 text-sm text-ink-2">
                 {unchecked.map((u, i) => (
                   <li key={`${u.check_id}-${i}`}>
-                    <span className="mr-2 font-mono text-2xs text-signal">{u.check_id}</span>{u.title}
-                    {u.reason && <span className="text-ink-3"> (needs {u.reason})</span>}
+                    <CheckName checkId={u.check_id} title={u.title} plain={plainByCheck[u.check_id]} />
+                    {u.reason && <span className="text-xs text-ink-3">Needs {u.reason}.</span>}
                   </li>
                 ))}
               </ul>
@@ -254,7 +276,7 @@ export function AgentReportView({ report, question, issues }: { report: AgentRep
               {report.whats_working.map((w) => (
                 <li key={w.check_id} className="flex gap-3 border-b border-rule py-3 text-base">
                   <CheckLabel status="pass" />
-                  <span><span className="mr-1.5 font-mono text-2xs text-ink-3">{w.check_id}</span>{w.title}</span>
+                  <CheckName checkId={w.check_id} title={w.title} plain={plainByCheck[w.check_id]} />
                 </li>
               ))}
             </ul>

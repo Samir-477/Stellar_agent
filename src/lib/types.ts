@@ -11,6 +11,16 @@ export type CheckSpec = {
   title: string;
   default_severity: Severity;
   counts_toward_readiness: boolean;
+  plain?: PlainEntry | null; // the reviewed plain-language entry (engine/plain.py)
+};
+
+// Plain-language explanations for management and clients (engine/plain.py).
+export type PlainEntry = { name: string; problem: string; meaning: string; why: string; analogy: string; action: string };
+export type PlainTerm = { term: string; meaning: string };
+export type PlainExplanation = PlainEntry & {
+  site_case: string; // this site's own case: written by the model and checked, or a template
+  case_source: "model" | "rules";
+  terms: PlainTerm[]; // technical terms used in the technical details, explained
 };
 
 export type AgentInfo = {
@@ -262,6 +272,7 @@ export type IssueCard = {
   missing_facts: string[];
   fix_type: FixType;
   changes: CodeChange[];
+  plain?: PlainExplanation;
 };
 
 // Microsites: published, approved previews of a run's diagnosed URL.
@@ -297,6 +308,7 @@ export type MicrositeIssue = {
   fix_type: FixType;
   fixed: boolean;
   changes: Pick<CodeChange, "type" | "language" | "before" | "after" | "before_segments" | "after_segments" | "note">[];
+  plain?: PlainExplanation; // absent in microsites published before 2026-09-29
 };
 
 export type MicrositeLive = Omit<MicrositeSummary, "issue_count"> & { issues: MicrositeIssue[] };

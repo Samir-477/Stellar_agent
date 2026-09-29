@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Check, ChevronRight, Radar } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Lightbulb, Radar } from "lucide-react";
 import { PILLARS, PILLAR_ORDER } from "@/lib/pillars";
-import type { ClientPriority, IntelligenceReport, Lane, Pillar, WorkItem } from "@/lib/types";
+import type { ClientPriority, IntelligenceReport, Lane, Pillar, PlainEntry, WorkItem } from "@/lib/types";
 
 // The Intelligence layer is the client's summary: what the site's state is, the few fixes that
 // matter most, what already works and what AI says. The technical detail lives in Agents.
@@ -36,9 +36,11 @@ function legacyCards(report: IntelligenceReport): ClientPriority[] {
   }));
 }
 
-export function IntelligenceLayer({ runId, report, agentNames }: {
+export function IntelligenceLayer({ runId, report, agentNames, plainByCheck = {} }: {
   runId: string; report: IntelligenceReport; agentNames: Record<string, string>;
+  plainByCheck?: Record<string, PlainEntry | null | undefined>; // the reviewed plain entry of each check
 }) {
+  const plainOf = (checkId: string | undefined) => (checkId ? plainByCheck[checkId.split(",")[0]] : undefined);
   const summary = report.executive_summary.client ?? [];
   const cards = report.executive_summary.client_priorities?.length ? report.executive_summary.client_priorities : legacyCards(report);
   const strengths = report.whats_working.slice(0, 5);
@@ -101,6 +103,12 @@ export function IntelligenceLayer({ runId, report, agentNames }: {
               <div>
                 <h3 className="font-display text-2xl leading-snug font-semibold tracking-[-0.01em]">{card.headline}</h3>
                 {card.why && <p className="mt-2 text-base leading-relaxed text-ink-2">{card.why}</p>}
+                {plainOf(card.check_ids[0])?.analogy && (
+                  <p className="mt-2.5 flex gap-2 text-sm leading-relaxed text-ink-2">
+                    <Lightbulb aria-hidden="true" size={15} className="mt-0.5 shrink-0 text-amber" />
+                    <span><span className="font-semibold text-ink">Think of it like: </span>{plainOf(card.check_ids[0])?.analogy}</span>
+                  </p>
+                )}
                 <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-3">
                   {card.effort && <span className="font-semibold text-ink-2">{EFFORT[card.effort] ?? card.effort}</span>}
                   <span>{card.pages ? `${card.pages} page${card.pages === 1 ? "" : "s"}` : "Site-wide"}</span>
@@ -128,7 +136,10 @@ export function IntelligenceLayer({ runId, report, agentNames }: {
             {strengths.map((s) => (
               <li key={s.id} className="flex gap-3 text-base leading-snug">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-soft text-signal"><Check aria-hidden="true" size={12} strokeWidth={3} /></span>
-                {s.title}
+                <span>
+                  {plainOf(s.check_id)?.name ?? s.title}
+                  {plainOf(s.check_id) && <span className="block text-xs text-ink-3">{s.title}</span>}
+                </span>
               </li>
             ))}
             {!strengths.length && <li className="text-base text-ink-3">No high-impact passes in this run.</li>}
@@ -141,7 +152,10 @@ export function IntelligenceLayer({ runId, report, agentNames }: {
             {observations.map((o) => (
               <li key={o.id} className="flex gap-3 text-base leading-snug">
                 <Radar aria-hidden="true" size={18} className="mt-0.5 shrink-0 text-ink-3" />
-                {o.title}
+                <span>
+                  {plainOf(o.check_ids[0])?.problem ?? o.title}
+                  {plainOf(o.check_ids[0]) && <span className="block text-xs text-ink-3">{o.title}</span>}
+                </span>
               </li>
             ))}
             {!observations.length && <li className="text-base text-ink-3">No AI answers were sampled in this run.</li>}
@@ -157,7 +171,12 @@ export function IntelligenceLayer({ runId, report, agentNames }: {
             <span className="text-sm text-ink-3">{unchecked.length} checks had too little evidence in this run</span>
           </summary>
           <ul className="grid gap-x-10 gap-y-2 px-6 pb-6 pl-14 text-sm text-ink-2 md:grid-cols-2">
-            {unchecked.map((a) => <li key={a.id}>{a.title}</li>)}
+            {unchecked.map((a) => (
+              <li key={a.id}>
+                {plainOf(a.check_id)?.name ?? a.title}
+                {plainOf(a.check_id) && <span className="block text-xs text-ink-3">{a.title}</span>}
+              </li>
+            ))}
           </ul>
         </details>
       )}

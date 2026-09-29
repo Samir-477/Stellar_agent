@@ -59,14 +59,15 @@ def review_entry_page(run_id: str, store: Store, blobs: BlobStore) -> PageReview
         patch["title"] = titles.get(patch["key"], "Suggested change")
     result = apply(raw, page.final_url or page.url, patches)
 
+    cases = (repo.get_intelligence_report(run_id) or {}).get("plain_cases") or {}
     issues = []
-    for card in build_issue_cards(findings, patches, page_snippets(raw, patches)):
+    for card in build_issue_cards(findings, patches, page_snippets(raw, patches), cases):
         on_page = any(norm(p) in page_urls for p in card["pages"]) or bool(card["changes"])
         if not on_page or card["fix_type"] == "observation":
             continue
         changes = [c for c in card["changes"] if c["page_url"] and norm(c["page_url"]) in page_urls]
         issues.append({k: card[k] for k in ("agent_id", "agent_name", "check_id", "status", "severity", "title",
-                                            "impact", "fix", "fix_type")}
+                                            "impact", "fix", "fix_type", "plain")}
                       | {"fixed": any(c["key"] in result.placed for c in changes),
                          "changes": [{k: c[k] for k in ("type", "language", "before", "after", "before_segments",
                                                         "after_segments", "note")} for c in changes]})

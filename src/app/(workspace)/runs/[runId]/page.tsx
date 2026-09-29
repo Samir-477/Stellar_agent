@@ -193,7 +193,8 @@ async function IntelligenceSection({ runId, agentCount, data }: {
       </div>
     );
   }
-  return <IntelligenceLayer runId={runId} report={report} agentNames={Object.fromEntries(agents.map((a) => [a.id, a.name]))} />;
+  return <IntelligenceLayer runId={runId} report={report} agentNames={Object.fromEntries(agents.map((a) => [a.id, a.name]))}
+                            plainByCheck={Object.fromEntries(agents.flatMap((a) => a.checks.map((c) => [c.id, c.plain])))} />;
 }
 
 async function AgentsSection({ runId, selected, data }: { runId: string; selected?: string; data?: ReturnType<typeof loadAgents> }) {

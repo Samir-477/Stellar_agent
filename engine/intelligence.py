@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from engine.lib.topics import fact_topics
 from engine.lib.urls import norm
 from engine.llm import LLMClient, LLMError, load_prompt
+from engine.plain import site_cases
 from engine.registry import AGENTS
 from engine.reports import check_statuses
 from engine.schemas import SCHEMA_VERSION, CheckStatus, Finding
@@ -521,6 +522,7 @@ def build_intelligence_report(findings_by_agent: dict[str, list[Finding]], key_p
     attn = attention(all_findings, items)
     lead = leads(items, causes)
     summary = summarize(llm, ready, items, causes, strong, attn, lead)
+    cases = site_cases(llm, all_findings)
 
     def as_dict(i: WorkItem) -> dict:
         return {k: v for k, v in i.__dict__.items()}
@@ -550,4 +552,6 @@ def build_intelligence_report(findings_by_agent: dict[str, list[Finding]], key_p
             "facts_to_supply": [{"id": i.id, "facts": i.facts, "agents": i.agents} for i in items if i.facts],
         },
         "coverage": {"agents": sorted(findings_by_agent), "notes": coverage_notes},
+        # A plain sentence per issue about this site, by issue key (engine/plain.py); missing ones use a template.
+        "plain_cases": cases,
     }

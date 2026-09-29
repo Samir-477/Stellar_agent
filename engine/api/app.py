@@ -11,7 +11,7 @@ from typing import Any, Literal
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field, HttpUrl
 
-from engine import catalog, progress
+from engine import catalog, plain, progress
 from engine.issues import build_issue_cards
 from engine.core.blobstore import make_blob_store
 from engine.core.config import get_settings
@@ -111,7 +111,8 @@ def agents() -> list[dict]:
              "requires": sorted(a.requires), "counts_toward_readiness": a.counts_toward_readiness,
              **catalog.AGENTS[a.id],  # question, outcome, how, example
              "reads": agent_collectors(a.id), "collectors": collectors_for([a.id]),
-             "checks": [c.model_dump() for c in a.checks]} for a in AGENTS.values()]
+             "checks": [{**c.model_dump(), "plain": plain.library_json().get(c.id)} for c in a.checks]}
+            for a in AGENTS.values()]
 
 
 @app.get("/api/v1/collectors", dependencies=[api])
@@ -243,7 +244,8 @@ def run_issues(run_id: str) -> dict:
         raise HTTPException(404, "run not found")
     patches = repo.list_patches(run_id)
     snippets = run_snippets(run_id, str(run["snapshot_id"]), patches, PostgresStore(), make_blob_store(get_settings()))
-    result = {"issues": build_issue_cards(repo.list_findings(run_id), patches, snippets)}
+    cases = (repo.get_intelligence_report(run_id) or {}).get("plain_cases") or {}
+    result = {"issues": build_issue_cards(repo.list_findings(run_id), patches, snippets, cases)}
     return _remember("issues", run_id, result) if run["status"] in FINISHED else result
 
 

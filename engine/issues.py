@@ -13,6 +13,7 @@ without a code change is never shown as if it had one:
 
 from __future__ import annotations
 
+from engine.plain import explain, issue_key
 from engine.registry import AGENTS
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, None: 5}
@@ -32,8 +33,10 @@ def fix_type(finding: dict, changes: list[dict]) -> str:
     return "action"
 
 
-def build_issue_cards(findings: list[dict], patches: list[dict], snippets: dict[str, dict]) -> list[dict]:
-    """findings: stored finding payloads; patches: stored patch payloads; snippets: by patch key."""
+def build_issue_cards(findings: list[dict], patches: list[dict], snippets: dict[str, dict],
+                      cases: dict[str, str] | None = None) -> list[dict]:
+    """findings: stored finding payloads; patches: stored patch payloads; snippets: by patch key;
+    cases: plain sentences about this site by issue key (engine/plain.py), where the model wrote one."""
     by_key = {p["key"]: p for p in patches}
     cards = []
     for f in findings:
@@ -63,6 +66,7 @@ def build_issue_cards(findings: list[dict], patches: list[dict], snippets: dict[
             "effort": f.get("effort"), "pages": (f.get("scope") or {}).get("pages", []),
             "evidence": f.get("evidence", []), "missing_facts": f.get("missing_facts", []),
             "fix_type": fix_type(f, changes), "changes": changes,
+            "plain": explain(f, (cases or {}).get(issue_key(f))),
         })
     cards.sort(key=lambda c: (c["status"] != "fail", SEVERITY_ORDER.get(c["severity"], 5), -len(c["pages"]), c["check_id"]))
     for index, card in enumerate(cards):

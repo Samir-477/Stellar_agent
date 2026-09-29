@@ -70,7 +70,8 @@ export function AgentsLayer({ runId, reports, agents, issues, initial }: {
         {selected && reports[selected] && <motion.div key={selected} id="agent-report" className="min-w-0 pt-10"
           initial={reduced ? false : { opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={reduced ? undefined : { opacity: 0, x: -10 }}
           transition={{ duration: 0.18 }}>
-          <AgentReportView report={reports[selected]} question={info?.question} issues={issues?.filter((i) => i.agent_id === selected)} />
+          <AgentReportView report={reports[selected]} question={info?.question} issues={issues?.filter((i) => i.agent_id === selected)}
+                           plainByCheck={Object.fromEntries((info?.checks ?? []).map((c) => [c.id, c.plain]))} />
           {info && !info.counts_toward_readiness && <p className="mt-8 border-l-[3px] border-amber bg-amber-bg px-4 py-3 text-sm text-ink">This observation agent reports a dated sample of search results or AI answers. It does not affect readiness scores.</p>}
         </motion.div>}
       </AnimatePresence>
