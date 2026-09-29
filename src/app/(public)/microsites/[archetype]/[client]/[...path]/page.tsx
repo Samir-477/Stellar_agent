@@ -35,7 +35,6 @@ export default async function MicrositePage({ params }: { params: Promise<Params
   const views = {
     fixed: `/api/public/microsites/html?slug=${slug}&view=fixed`,
     annotated: `/api/public/microsites/html?slug=${slug}&view=annotated`,
-    original: `/api/public/microsites/html?slug=${slug}&view=original`,
   };
   const fixed = microsite.issues.filter((i) => i.fixed).length;
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from lxml import html as lxml_html
@@ -20,7 +21,7 @@ from engine.issues import build_issue_cards
 from engine.lib.urls import norm
 from engine.orchestrator import repo
 from engine.output.diffs import page_snippets
-from engine.output.patcher import apply
+from engine.output.patcher import PlacementResult, apply
 from engine.store import Store
 
 ARCHETYPES = ("hospitality", "loans", "retail", "logistics")
@@ -52,25 +53,30 @@ def _page_for(store: Store, snapshot_id: str, url: str):
     return next((p for p in store.list_pages(snapshot_id) if target in (norm(p.url), norm(p.final_url or p.url))), None)
 
 
-def build_microsite(run_id: str, store: Store, blobs: BlobStore, *, client_slug: str | None = None,
-                    published_by: str | None = None) -> dict:
+@dataclass
+class PageReview:
+    """The diagnosed page with its proposed changes applied, and the issues found on it."""
+    ctx: dict
+    raw: str
+    patches: list[dict]
+    result: PlacementResult
+    original_html: str
+    issues: list[dict]  # fixed first; observations left out
+
+
+def review_entry_page(run_id: str, store: Store, blobs: BlobStore) -> PageReview:
+    """What a microsite shows, computed from the captured page: the Output layer's technical column
+    reads the same list, so the workspace and the published page never disagree."""
     run = repo.get_run(run_id)
     if run is None:
         raise MicrositeError("Run not found.")
     if run["status"] not in ("completed", "completed_partial"):
         raise MicrositeError("The run hasn't finished yet.")
     ctx = repo.run_context(run_id)
-    archetype = repo.run_archetype(ctx)
-    if archetype not in ARCHETYPES:
-        raise MicrositeError("Confirm the business type for this client before publishing.")
-    client_slug = client_slug or slugify(ctx["name"])
-    if not SLUG.match(client_slug or ""):
-        raise MicrositeError("The client part of the address may use only lowercase letters, numbers and hyphens.")
-
     url = ctx["primary_url"]
     page = _page_for(store, str(run["snapshot_id"]), url)
     if page is None or not page.raw_html_key:
-        raise MicrositeError("The diagnosed page wasn't captured in this run, so there is nothing to publish.")
+        raise MicrositeError("The diagnosed page wasn't captured in this run.")
     try:
         raw = blobs.get(page.raw_html_key).decode("utf-8", errors="replace")
     except Exception as exc:  # noqa: BLE001 - storage errors differ by backend
@@ -84,7 +90,6 @@ def build_microsite(run_id: str, store: Store, blobs: BlobStore, *, client_slug:
         patch["title"] = titles.get(patch["key"], "Suggested change")
     base = page.final_url or page.url
     result = apply(raw, base, patches)
-    original = apply(raw, base, []).fixed_html
     snippets = page_snippets(raw, patches)
 
     cards = []
@@ -99,6 +104,22 @@ def build_microsite(run_id: str, store: Store, blobs: BlobStore, *, client_slug:
                         "changes": [{k: c[k] for k in ("type", "language", "before", "after", "before_segments",
                                                        "after_segments", "note")} for c in changes]})
     cards.sort(key=lambda c: not c["fixed"])
+    return PageReview(ctx=ctx, raw=raw, patches=patches, result=result,
+                      original_html=apply(raw, base, []).fixed_html, issues=cards)
+
+
+def build_microsite(run_id: str, store: Store, blobs: BlobStore, *, client_slug: str | None = None,
+                    published_by: str | None = None) -> dict:
+    review = review_entry_page(run_id, store, blobs)
+    ctx, raw, patches, result, original = review.ctx, review.raw, review.patches, review.result, review.original_html
+    archetype = repo.run_archetype(ctx)
+    if archetype not in ARCHETYPES:
+        raise MicrositeError("Confirm the business type for this client before publishing.")
+    client_slug = client_slug or slugify(ctx["name"])
+    if not SLUG.match(client_slug or ""):
+        raise MicrositeError("The client part of the address may use only lowercase letters, numbers and hyphens.")
+    url = ctx["primary_url"]
+    cards = review.issues
 
     title = (lxml_html.fromstring(raw).findtext(".//title") or "").strip() or None
     micro_id = str(uuid.uuid4())

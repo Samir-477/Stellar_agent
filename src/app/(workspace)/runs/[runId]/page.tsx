@@ -10,7 +10,7 @@ import { RunStatusLabel, isFinished } from "@/components/workspace/run-status";
 import { EngineError, engine, isRunId } from "@/lib/engine";
 import { formatDate, formatDuration, plural } from "@/lib/format";
 import { sameUrl } from "@/lib/microsite";
-import type { IntelligenceReport, IssueCard, MicrositeSummary, Progress } from "@/lib/types";
+import type { IntelligenceReport, IssueCard, MicrositeIssue, MicrositeSummary, Progress } from "@/lib/types";
 
 const LAYERS = [
   { id: "intelligence", label: "Intelligence", hint: "The business summary across all agents", icon: Sparkles },
@@ -162,11 +162,12 @@ async function AgentsSection({ runId, selected }: { runId: string; selected?: st
 }
 
 async function OutputSection({ runId, client }: { runId: string; client: Progress["run"]["client"] }) {
-  const [preview, issues, microsites] = await Promise.all([
-    engine.preview(runId), settle<IssueCard[]>(engine.issues(runId), []), settle<MicrositeSummary[]>(engine.microsites(), []),
+  const [preview, issues, pageIssues, microsites] = await Promise.all([
+    engine.preview(runId), settle<IssueCard[]>(engine.issues(runId), []),
+    settle<MicrositeIssue[] | null>(engine.pageIssues(runId), null), settle<MicrositeSummary[]>(engine.microsites(), []),
   ]);
   const live = microsites.find((m) => !m.superseded_at && !m.unpublished_at && sameUrl(m.source_url, client.primary_url)) ?? null;
   // Remount when the server hands over freshly signed links.
-  return <OutputLayer key={preview?.links_expire_at ?? "none"} runId={runId} initial={preview} issues={issues}
+  return <OutputLayer key={preview?.links_expire_at ?? "none"} runId={runId} initial={preview} issues={issues} pageIssues={pageIssues}
                       entryUrl={client.primary_url} archetype={client.archetype} clientName={client.name} live={live} />;
 }

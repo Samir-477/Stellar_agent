@@ -7,10 +7,11 @@ import { useEffect, useMemo, useState } from "react";
 import { CodeDiff, changeTypeLabel } from "@/components/workspace/code-diff";
 import { FixTypeBadge } from "@/components/workspace/issue-list";
 import { Pager, usePaged } from "@/components/workspace/pager";
+import { MicrositeIssues } from "@/components/microsite/microsite-issues";
 import { PreviewFrame } from "@/components/workspace/preview-frame";
 import { formatDate, urlPath } from "@/lib/format";
 import { ARCHETYPE_LABEL, micrositeHref, pagePath, sameUrl, slugify } from "@/lib/microsite";
-import type { CodeChange, IssueCard, MicrositeSummary, Preview } from "@/lib/types";
+import type { CodeChange, IssueCard, MicrositeIssue, MicrositeSummary, Preview } from "@/lib/types";
 
 type PageChange = { issue: IssueCard; change: CodeChange };
 
@@ -122,10 +123,11 @@ function PublishPanel({ runId, entryUrl, archetype, clientName, live }: {
 }
 
 /** The Output layer for the diagnosed URL: the page with the fixes applied, and every code change before and after. */
-export function OutputLayer({ runId, initial, issues, entryUrl, archetype, clientName, live }: {
+export function OutputLayer({ runId, initial, issues, pageIssues, entryUrl, archetype, clientName, live }: {
   runId: string;
   initial: Preview | null;
   issues: IssueCard[];
+  pageIssues: MicrositeIssue[] | null; // null: the page review was unavailable
   entryUrl: string;
   archetype: string | null;
   clientName: string;
@@ -200,7 +202,14 @@ export function OutputLayer({ runId, initial, issues, entryUrl, archetype, clien
               </button>
             </div>
           ) : page ? (
-            <PreviewFrame views={page.views} pageUrl={page.url} />
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+              <div className="min-w-0"><PreviewFrame views={page.views} pageUrl={page.url} /></div>
+              <aside aria-label="Technical details" className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-120px)] lg:self-start lg:overflow-y-auto">
+                {pageIssues
+                  ? <MicrositeIssues issues={pageIssues} />
+                  : <p className="border border-rule bg-mist px-5 py-6 text-sm text-ink-2">The technical details couldn&apos;t be loaded. The code changes are listed below.</p>}
+              </aside>
+            </div>
           ) : (
             <p className="border border-rule bg-mist px-6 py-8 text-base text-ink-2">
               The preview has no version of the diagnosed page, because no change was proposed for it. Changes on other sampled pages are in the Agents layer.

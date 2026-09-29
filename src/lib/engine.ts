@@ -1,6 +1,6 @@
 import "server-only";
 import type {
-  AgentInfo, AgentReport, Client, CollectorInfo, IntelligenceReport, IssueCard, MicrositeLive, MicrositeSummary, Preview,
+  AgentInfo, AgentReport, Client, CollectorInfo, IntelligenceReport, IssueCard, MicrositeIssue, MicrositeLive, MicrositeSummary, Preview,
   Progress, RunSummary,
 } from "@/lib/types";
 
@@ -90,6 +90,8 @@ export const engine = {
     return optional(call<AgentReport>(runPath(runId, `/agents/${agentId}`)));
   },
   issues: (runId: string) => call<{ issues: IssueCard[] }>(runPath(runId, "/issues")).then((r) => r.issues),
+  /** The diagnosed page's issues, fixed first, as a microsite of the run lists them. */
+  pageIssues: (runId: string) => call<{ issues: MicrositeIssue[] }>(runPath(runId, "/page-issues")).then((r) => r.issues),
   publishMicrosite: (runId: string, body: { client_slug?: string; published_by?: string }) =>
     call<MicrositeSummary>(runPath(runId, "/microsite"), { method: "POST", body: JSON.stringify(body) }),
   microsites: () => call<MicrositeSummary[]>("/microsites"),

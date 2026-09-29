@@ -3,22 +3,21 @@
 import { ExternalLink, Lock } from "lucide-react";
 import { useState } from "react";
 
-export type FrameView = "fixed" | "annotated" | "original";
+export type FrameView = "fixed" | "annotated";
 
 const VIEW_COPY: Record<FrameView, { label: string; hint: string }> = {
   fixed: { label: "Fixed page", hint: "Every placed fix applied" },
   annotated: { label: "What changed", hint: "Each fix marked; click one to see it" },
-  original: { label: "Before", hint: "The page as captured" },
 };
 
-/** A captured page in a sandboxed frame, with the fixed, marked and original versions one click apart. */
+/** A captured page in a sandboxed frame: the fixed version, or the same page with each fix marked. */
 export function PreviewFrame({ views, pageUrl, initial = "fixed", height = "h-[78vh] min-h-[560px]" }: {
   views: Partial<Record<FrameView, string>>;
   pageUrl: string;
   initial?: FrameView;
   height?: string;
 }) {
-  const available = (["fixed", "annotated", "original"] as FrameView[]).filter((v) => views[v]);
+  const available = (["fixed", "annotated"] as FrameView[]).filter((v) => views[v]);
   const [view, setView] = useState<FrameView>(available.includes(initial) ? initial : available[0]);
   const src = views[view];
   return (

@@ -22,7 +22,7 @@ from engine.orchestrator.runner import dispatch, make_env, run_inline, trigger_d
 from engine.orchestrator.executor import execute_task
 from engine.output import preview
 from engine.output.bundle import build_share_bundle
-from engine.output.microsite import MicrositeError, build_microsite
+from engine.output.microsite import MAX_ISSUES, MicrositeError, build_microsite, review_entry_page
 from engine.output.snippet_cache import run_snippets
 from engine.output.viewer import router as share_router
 from engine.registry import AGENTS, COLLECTORS, agent_collectors, collectors_for
@@ -204,6 +204,17 @@ def run_issues(run_id: str) -> dict:
     patches = repo.list_patches(run_id)
     snippets = run_snippets(run_id, str(run["snapshot_id"]), patches, PostgresStore(), make_blob_store(get_settings()))
     return {"issues": build_issue_cards(repo.list_findings(run_id), patches, snippets)}
+
+
+@app.get("/api/v1/runs/{run_id}/page-issues", dependencies=[api])
+def page_issues(run_id: str) -> dict:
+    """The diagnosed page's issues, fixed first, exactly as a microsite of this run would list them."""
+    try:
+        review = review_entry_page(run_id, PostgresStore(), make_blob_store(get_settings()))
+    except MicrositeError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"issues": review.issues[:MAX_ISSUES], "changes_placed": len(review.result.placed),
+            "changes_total": len(review.patches)}
 
 
 class MicrositeIn(BaseModel):
