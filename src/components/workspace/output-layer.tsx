@@ -2,11 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ExternalLink, Globe, RefreshCw, Send, TriangleAlert } from "lucide-react";
+import { Check, ExternalLink, Globe, RefreshCw, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { CodeDiff, changeTypeLabel } from "@/components/workspace/code-diff";
-import { FixTypeBadge } from "@/components/workspace/issue-list";
-import { Pager, usePaged } from "@/components/workspace/pager";
 import { MicrositeIssues } from "@/components/microsite/microsite-issues";
 import { PreviewFrame } from "@/components/workspace/preview-frame";
 import { formatDate, urlPath } from "@/lib/format";
@@ -122,7 +119,7 @@ function PublishPanel({ runId, entryUrl, archetype, clientName, live }: {
   );
 }
 
-/** The Output layer for the diagnosed URL: the page with the fixes applied, and every code change before and after. */
+/** The Output layer for the diagnosed URL: the page with the fixes applied beside what was fixed and what is left, with the code. */
 export function OutputLayer({ runId, initial, issues, pageIssues, entryUrl, archetype, clientName, live }: {
   runId: string;
   initial: Preview | null;
@@ -149,7 +146,6 @@ export function OutputLayer({ runId, initial, issues, pageIssues, entryUrl, arch
   const changes = useMemo<PageChange[]>(() => issues.flatMap((issue) => issue.changes
     .filter((change) => sameUrl(change.page_url, entryUrl))
     .map((change) => ({ issue, change }))), [issues, entryUrl]);
-  const paged = usePaged(changes, 5);
 
   async function build() {
     setBuilding(true);
@@ -202,12 +198,12 @@ export function OutputLayer({ runId, initial, issues, pageIssues, entryUrl, arch
               </button>
             </div>
           ) : page ? (
-            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
               <div className="min-w-0"><PreviewFrame views={page.views} pageUrl={page.url} /></div>
               <aside aria-label="Technical details" className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-120px)] lg:self-start lg:overflow-y-auto">
                 {pageIssues
-                  ? <MicrositeIssues issues={pageIssues} />
-                  : <p className="border border-rule bg-mist px-5 py-6 text-sm text-ink-2">The technical details couldn&apos;t be loaded. The code changes are listed below.</p>}
+                  ? <MicrositeIssues issues={pageIssues} wide />
+                  : <p className="border border-rule bg-mist px-5 py-6 text-sm text-ink-2">The technical details couldn&apos;t be loaded. Each agent&apos;s issues and code are in the Agents layer.</p>}
               </aside>
             </div>
           ) : (
@@ -221,47 +217,6 @@ export function OutputLayer({ runId, initial, issues, pageIssues, entryUrl, arch
       {preview && page && (
         <PublishPanel runId={runId} entryUrl={entryUrl} archetype={archetype} clientName={clientName} live={live} />
       )}
-
-      <section aria-labelledby="code-heading">
-        <h2 id="code-heading" className="font-display text-4xl font-semibold tracking-[-0.02em]">Code changes, before and after</h2>
-        <p className="mt-2 max-w-[680px] text-base text-ink-2">
-          Each change on this page with the issue it fixes. Copy the new code, or open the issue in the Agents layer for its evidence.
-        </p>
-        <div className="mt-7 space-y-6">
-          {paged.rows.map(({ issue, change }) => (
-            <article key={change.key} className="border border-rule">
-              <header className="flex flex-wrap items-start justify-between gap-3 border-b border-rule px-5 py-4">
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
-                    <span className="font-mono text-signal">{issue.agent_id}</span>
-                    <span>{issue.agent_name}</span>
-                    <span>{changeTypeLabel(change.type)}</span>
-                  </p>
-                  <h3 className="mt-1 text-md leading-snug font-semibold">{issue.title}</h3>
-                </div>
-                <span className="flex items-center gap-3">
-                  <FixTypeBadge type={issue.fix_type} />
-                  {change.placed === false
-                    ? <span className="inline-flex items-center gap-1 text-xs font-medium text-amber"><TriangleAlert aria-hidden="true" size={13} /> Not placed</span>
-                    : <span className="inline-flex items-center gap-1 text-xs font-medium text-signal"><Check aria-hidden="true" size={13} /> In the preview</span>}
-                </span>
-              </header>
-              <div className="px-5 py-5">
-                <CodeDiff before={change.before} after={change.after} beforeSegments={change.before_segments}
-                          afterSegments={change.after_segments} language={change.language} compact />
-                <p className="mt-3 text-sm leading-relaxed text-ink-2">
-                  {change.placed === false && change.reason ? <span className="font-medium text-amber">{change.reason}. </span> : null}
-                  {change.rationale || change.note}
-                </p>
-              </div>
-            </article>
-          ))}
-          {!changes.length && <p className="border border-rule bg-mist px-6 py-8 text-base text-ink-2">No code changes were proposed for this page.</p>}
-        </div>
-        {changes.length > 5 && (
-          <div className="mt-5"><Pager page={paged.page} pages={paged.pages} total={paged.total} size={paged.size} onPage={paged.setPage} noun="changes" /></div>
-        )}
-      </section>
     </div>
   );
 }

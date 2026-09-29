@@ -5,8 +5,7 @@ import { useState } from "react";
 import { CodeDiff } from "@/components/workspace/code-diff";
 import type { MicrositeIssue } from "@/lib/types";
 
-function IssueItem({ issue, open, onToggle }: { issue: MicrositeIssue; open: boolean; onToggle: () => void }) {
-  const change = issue.changes[0];
+function IssueItem({ issue, open, onToggle, wide }: { issue: MicrositeIssue; open: boolean; onToggle: () => void; wide: boolean }) {
   return (
     <li className="border-b border-rule last:border-b-0">
       <button type="button" onClick={onToggle} aria-expanded={open}
@@ -24,18 +23,22 @@ function IssueItem({ issue, open, onToggle }: { issue: MicrositeIssue; open: boo
         <div className="space-y-4 px-5 pb-6 pl-[54px] text-sm leading-relaxed">
           {issue.impact && <p><span className="font-semibold text-ink">Why it matters: </span><span className="text-ink-2">{issue.impact}</span></p>}
           <p><span className="font-semibold text-ink">{issue.fixed ? "What we changed: " : "What to do: "}</span><span className="text-ink-2">{issue.fix}</span></p>
-          {change && (
-            <CodeDiff before={change.before} after={change.after} beforeSegments={change.before_segments}
-                      afterSegments={change.after_segments} language={change.language} compact />
-          )}
+          {issue.changes.map((change, i) => (
+            <div key={i} className="space-y-2">
+              <CodeDiff before={change.before} after={change.after} beforeSegments={change.before_segments}
+                        afterSegments={change.after_segments} language={change.language} compact={!wide} />
+              {change.note && <p className="text-xs text-ink-3">{change.note}</p>}
+            </div>
+          ))}
         </div>
       )}
     </li>
   );
 }
 
-/** The issues on this page: the ones fixed in this preview first, then the ones still to do. */
-export function MicrositeIssues({ issues }: { issues: MicrositeIssue[] }) {
+/** The issues on this page: the ones fixed in this preview first, then the ones still to do. `wide` gives the
+ *  code diffs full size, for a column wide enough to show before and after side by side. */
+export function MicrositeIssues({ issues, wide = false }: { issues: MicrositeIssue[]; wide?: boolean }) {
   const fixed = issues.filter((i) => i.fixed);
   const pending = issues.filter((i) => !i.fixed);
   const [open, setOpen] = useState<number | null>(fixed.length ? 0 : null);
@@ -48,7 +51,7 @@ export function MicrositeIssues({ issues }: { issues: MicrositeIssue[] }) {
         </h2>
         {fixed.length ? (
           <ul className="mt-3 border border-rule bg-paper">
-            {fixed.map((issue, i) => <IssueItem key={`${issue.check_id}-${i}`} issue={issue} open={open === i} onToggle={() => toggle(i)} />)}
+            {fixed.map((issue, i) => <IssueItem key={`${issue.check_id}-${i}`} issue={issue} open={open === i} onToggle={() => toggle(i)} wide={wide} />)}
           </ul>
         ) : <p className="mt-3 text-sm text-ink-2">No fix could be applied to this page automatically.</p>}
       </section>
@@ -60,7 +63,7 @@ export function MicrositeIssues({ issues }: { issues: MicrositeIssue[] }) {
           <p className="mt-1 text-xs text-ink-3">These need work outside the page, or facts from you.</p>
           <ul className="mt-3 border border-rule bg-paper">
             {pending.map((issue, i) => (
-              <IssueItem key={`${issue.check_id}-p${i}`} issue={issue} open={open === fixed.length + i} onToggle={() => toggle(fixed.length + i)} />
+              <IssueItem key={`${issue.check_id}-p${i}`} issue={issue} open={open === fixed.length + i} onToggle={() => toggle(fixed.length + i)} wide={wide} />
             ))}
           </ul>
         </section>
