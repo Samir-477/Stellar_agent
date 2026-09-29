@@ -1,16 +1,16 @@
 import Image from "next/image";
 import { site } from "@/lib/site";
 
-/** The mark: one diagnosis (the star) with the SEO, AEO and GEO agents in orbit around it. */
+/** The mark (a green spark on a light tile) with the name on two lines: "Stellar" over "Agents". */
 export function Brand({ tone = "light", size = "md" }: { tone?: "light" | "dark"; size?: "md" | "lg" }) {
   const [first, ...rest] = site.name.split(" ");
   const markSize = size === "lg" ? 52 : 44;
   return (
     <span className="inline-flex items-center gap-3" aria-label={site.name}>
-      <Image src={site.logo} alt="" width={markSize} height={markSize} priority className={tone === "dark" ? "rounded-[10px] ring-1 ring-white/20" : ""} />
-      <span aria-hidden="true" className={`flex flex-col font-display leading-[1.02] font-bold tracking-[0.035em] uppercase ${size === "lg" ? "text-lg" : "text-base"}`}>
-        <span className={tone === "dark" ? "text-white" : "text-ink"}>{first}</span>
-        <span className={tone === "dark" ? "text-mint" : "text-signal"}>{rest.join(" ")}</span>
+      <Image src={site.logo} alt="" width={markSize} height={markSize} priority />
+      <span aria-hidden="true" className={`flex flex-col font-display leading-[1.05] tracking-[-0.02em] ${size === "lg" ? "text-2xl" : "text-xl"}`}>
+        <span className={`font-bold ${tone === "dark" ? "text-white" : "text-ink"}`}>{first}</span>
+        <span className={`font-semibold ${tone === "dark" ? "text-mint" : "text-signal"}`}>{rest.join(" ")}</span>
       </span>
     </span>
   );
