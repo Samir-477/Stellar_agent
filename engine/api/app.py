@@ -58,11 +58,15 @@ _MEMO_LOCK = threading.Lock()
 
 
 def _recall(kind: str, run_id: str) -> Any:
+    """A remembered result, if the run still exists: another instance may have deleted it since."""
     with _MEMO_LOCK:
         value = _MEMO.get((kind, run_id))
         if value is not None:
             _MEMO.move_to_end((kind, run_id))
-        return value
+    if value is not None and not repo.run_exists(run_id):
+        _forget(run_id)
+        return None
+    return value
 
 
 def _remember(kind: str, run_id: str, value: Any) -> Any:

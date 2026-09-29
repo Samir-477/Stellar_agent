@@ -84,6 +84,11 @@ _RUN_TASKS_SQL = (
     "from tasks where run_id=%s order by created_at")
 
 
+def run_exists(run_id: str) -> bool:
+    with connection() as conn:
+        return conn.execute("select 1 from runs where id=%s", (run_id,)).fetchone() is not None
+
+
 def run_context(run_id: str) -> dict:
     with connection() as conn:
         return conn.execute(_RUN_CONTEXT_SQL, (run_id,)).fetchone()

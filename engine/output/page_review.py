@@ -39,7 +39,7 @@ def _page_for(store: Store, snapshot_id: str, url: str):
 def review_entry_page(run_id: str, store: Store, blobs: BlobStore) -> PageReview:
     run = repo.get_run(run_id)
     if run is None:
-        raise ReviewError("Run not found.")
+        raise ReviewError("This run no longer exists; it may have been deleted. Open the run again from Sessions.")
     if run["status"] not in ("completed", "completed_partial"):
         raise ReviewError("The run hasn't finished yet.")
     ctx = repo.run_context(run_id)
