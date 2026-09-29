@@ -11,7 +11,7 @@ import { RunStatusLabel, isFinished } from "@/components/workspace/run-status";
 import { EngineError, engine, isRunId } from "@/lib/engine";
 import { formatDate, formatDuration, plural } from "@/lib/format";
 import { sameUrl } from "@/lib/microsite";
-import type { IssueCard, MicrositeSummary, Progress } from "@/lib/types";
+import type { IssueCard, MicrositeSummary, Progress, RunGaps } from "@/lib/types";
 
 const LAYERS = [
   { id: "intelligence", label: "Intelligence", hint: "The business summary across all agents", icon: Sparkles },
@@ -83,7 +83,13 @@ export default async function RunPage({ params, searchParams }: PageProps<"/runs
           </a>
         </div>
         <dl className="mt-7 grid grid-cols-2 gap-x-8 gap-y-3 border-t border-rule pt-5 text-sm sm:flex sm:flex-wrap sm:gap-x-14">
-          <div><dt className="text-ink-3">Status</dt><dd className="mt-0.5"><RunStatusLabel status={progress.status} /></dd></div>
+          <div>
+            <dt className="text-ink-3">Status</dt>
+            <dd className="mt-0.5"><RunStatusLabel status={progress.status} /></dd>
+            {progress.status === "completed_partial" && agentCount >= 2 && (
+              <dd><Link href={`/runs/${runId}?layer=intelligence#gaps`} className="text-xs font-medium text-signal hover:underline">See what&apos;s missing</Link></dd>
+            )}
+          </div>
           <div><dt className="text-ink-3">Started</dt><dd className="mt-0.5 font-medium">{formatDate(run.started_at ?? run.created_at)}</dd></div>
           <div><dt className="text-ink-3">{finished ? "Took" : "Running for"}</dt><dd className="mt-0.5 font-mono text-xs font-medium">{formatDuration(run.started_at ?? run.created_at, run.finished_at)}</dd></div>
           <div><dt className="text-ink-3">Agents</dt><dd className="mt-0.5 font-medium">{run.type === "full" ? `All ${agentCount}` : plural(agentCount, "agent")}</dd></div>
@@ -168,7 +174,9 @@ function handled<T>(promise: Promise<T>): Promise<T> {
   return promise;
 }
 
-const loadIntelligence = (runId: string) => Promise.all([engine.report(runId), engine.agents()]);
+const loadIntelligence = (runId: string) => Promise.all([
+  engine.report(runId), engine.agents(), settle<RunGaps | null>(engine.gaps(runId), null),
+]);
 const loadAgents = (runId: string) => Promise.all([
   engine.agentReports(runId), engine.agents(), settle<IssueCard[] | null>(engine.issues(runId), null),
 ]);
@@ -177,7 +185,7 @@ const loadOutput = (runId: string) => Promise.all([engine.preview(runId), settle
 async function IntelligenceSection({ runId, agentCount, data }: {
   runId: string; agentCount: number; data?: ReturnType<typeof loadIntelligence>;
 }) {
-  const [report, agents] = await (data ?? loadIntelligence(runId));
+  const [report, agents, gaps] = await (data ?? loadIntelligence(runId));
   if (!report) {
     return (
       <div className="border border-rule bg-mist px-6 py-10">
@@ -194,7 +202,8 @@ async function IntelligenceSection({ runId, agentCount, data }: {
     );
   }
   return <IntelligenceLayer runId={runId} report={report} agentNames={Object.fromEntries(agents.map((a) => [a.id, a.name]))}
-                            plainByCheck={Object.fromEntries(agents.flatMap((a) => a.checks.map((c) => [c.id, c.plain])))} />;
+                            plainByCheck={Object.fromEntries(agents.flatMap((a) => a.checks.map((c) => [c.id, c.plain])))}
+                            gaps={gaps} />;
 }
 
 async function AgentsSection({ runId, selected, data }: { runId: string; selected?: string; data?: ReturnType<typeof loadAgents> }) {

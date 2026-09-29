@@ -11,7 +11,7 @@ from typing import Any, Literal
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field, HttpUrl
 
-from engine import catalog, plain, progress
+from engine import catalog, gaps, plain, progress
 from engine.issues import build_issue_cards
 from engine.core.blobstore import make_blob_store
 from engine.core.config import get_settings
@@ -220,6 +220,20 @@ def intelligence_report(run_id: str) -> dict:
     if report is None:
         raise HTTPException(404, "no intelligence report yet (runs with 2+ agents produce one)")
     return report
+
+
+@app.get("/api/v1/runs/{run_id}/gaps", dependencies=[api])
+def run_gaps(run_id: str) -> dict:
+    """Why the run finished with gaps and which checks it couldn't run, each with a suggested fix."""
+    cached = _recall("gaps", run_id)
+    if cached is not None:
+        return cached
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, "run not found")
+    result = gaps.run_gaps(run["status"], repo.unfinished_tasks(run_id),
+                           repo.list_findings(run_id, status="unverifiable"), repo.model_call_count(run_id))
+    return _remember("gaps", run_id, result) if run["status"] in FINISHED else result
 
 
 @app.get("/api/v1/runs/{run_id}/findings", dependencies=[api])

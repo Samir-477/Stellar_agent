@@ -58,3 +58,7 @@ __pycache__/
 /CLAUDE.md
 /AGENTS.md
 /AGENT_HANDOFF.md
+
+.vercel
+.env*
+!.env.example

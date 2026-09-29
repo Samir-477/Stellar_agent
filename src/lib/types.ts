@@ -14,6 +14,15 @@ export type CheckSpec = {
   plain?: PlainEntry | null; // the reviewed plain-language entry (engine/plain.py)
 };
 
+// Why a run finished with gaps, and the checks it couldn't run, each with how to close it (engine/gaps.py).
+export type GapWho = "rerun" | "us" | "you";
+export type RunGaps = {
+  status: RunStatus;
+  model_calls: number;
+  steps: { step: string | null; name: string; status: string; title: string; what_happened: string; fix: string; who: GapWho; detail: string[] }[];
+  checks: { cause: string; title: string; explanation: string; fix: string; who: GapWho; items: { check_id: string; agent: string; title: string; name: string }[] }[];
+};
+
 // Plain-language explanations for management and clients (engine/plain.py).
 export type PlainEntry = { name: string; problem: string; meaning: string; why: string; analogy: string; action: string };
 export type PlainTerm = { term: string; meaning: string };

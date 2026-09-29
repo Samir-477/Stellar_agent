@@ -94,6 +94,10 @@ class AnswerStructure(Agent):
         holder = next((f for f in findings if f.check_id == "A2.02" and f.status in (St.WARN, St.FAIL)), None)
         if spare and holder:
             holder.patch_keys.extend(spare)
+        elif spare:
+            # No reported issue asks for these drafts (the headings check passed), so they aren't proposed;
+            # left in, validation dropped them and the run finished "with gaps" (Flipkart run, 2026-09-29).
+            patches = [p for p in patches if p.key not in set(spare)]
         coverage = Coverage(examined={"pages": len(pages), "sections_reviewed": len(reviews)})
         if note:
             coverage.skipped.append(note)

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowRight, Check, ChevronRight, Lightbulb, Radar } from "lucide-react";
 import { PILLARS, PILLAR_ORDER } from "@/lib/pillars";
-import type { ClientPriority, IntelligenceReport, Lane, Pillar, PlainEntry, WorkItem } from "@/lib/types";
+import { GapsPanel } from "@/components/workspace/gaps-panel";
+import type { ClientPriority, IntelligenceReport, Lane, Pillar, PlainEntry, RunGaps, WorkItem } from "@/lib/types";
 
 // The Intelligence layer is the client's summary: what the site's state is, the few fixes that
 // matter most, what already works and what AI says. The technical detail lives in Agents.
@@ -36,8 +37,9 @@ function legacyCards(report: IntelligenceReport): ClientPriority[] {
   }));
 }
 
-export function IntelligenceLayer({ runId, report, agentNames, plainByCheck = {} }: {
+export function IntelligenceLayer({ runId, report, agentNames, plainByCheck = {}, gaps = null }: {
   runId: string; report: IntelligenceReport; agentNames: Record<string, string>;
+  gaps?: RunGaps | null; // null: the gaps couldn't be loaded, so the plain list of unchecked items is shown
   plainByCheck?: Record<string, PlainEntry | null | undefined>; // the reviewed plain entry of each check
 }) {
   const plainOf = (checkId: string | undefined) => (checkId ? plainByCheck[checkId.split(",")[0]] : undefined);
@@ -163,7 +165,7 @@ export function IntelligenceLayer({ runId, report, agentNames, plainByCheck = {}
         </div>
       </section>
 
-      {unchecked.length > 0 && (
+      {gaps ? <GapsPanel gaps={gaps} /> : unchecked.length > 0 && (
         <details className="group border border-rule bg-mist [&_summary::-webkit-details-marker]:hidden">
           <summary className="flex cursor-pointer items-center gap-3 px-6 py-5">
             <ChevronRight aria-hidden="true" size={16} className="text-ink-3 transition-transform group-open:rotate-90" />

@@ -84,6 +84,19 @@ _RUN_TASKS_SQL = (
     "from tasks where run_id=%s order by created_at")
 
 
+def unfinished_tasks(run_id: str) -> list[dict]:
+    """Steps that didn't fully succeed, with a partial agent's validation errors."""
+    with connection() as conn:
+        return conn.execute(
+            "select kind, ref, status, error, output->'validation_errors' as validation_errors from tasks "
+            "where run_id=%s and status <> 'succeeded' order by created_at", (run_id,)).fetchall()
+
+
+def model_call_count(run_id: str) -> int:
+    with connection() as conn:
+        return conn.execute("select count(*) as n from llm_calls where run_id=%s", (run_id,)).fetchone()["n"]
+
+
 def run_exists(run_id: str) -> bool:
     with connection() as conn:
         return conn.execute("select 1 from runs where id=%s", (run_id,)).fetchone() is not None

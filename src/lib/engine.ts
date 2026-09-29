@@ -1,7 +1,7 @@
 import "server-only";
 import type {
   AgentInfo, AgentReport, Client, CollectorInfo, IntelligenceReport, IssueCard, MicrositeLive, MicrositeSummary, Preview,
-  Progress, RunSummary,
+  Progress, RunGaps, RunSummary,
 } from "@/lib/types";
 
 // Server-side client for the diagnosis engine. The browser never sees ENGINE_API_KEY:
@@ -94,6 +94,7 @@ export const engine = {
     if (!isAgentId(agentId)) throw new EngineError(404, "agent not found");
     return optional(call<AgentReport>(runPath(runId, `/agents/${agentId}`)));
   },
+  gaps: (runId: string) => call<RunGaps>(runPath(runId, "/gaps")),
   issues: (runId: string) => call<{ issues: IssueCard[] }>(runPath(runId, "/issues")).then((r) => r.issues),
   publishMicrosite: (runId: string, body: { client_slug?: string; published_by?: string }) =>
     call<MicrositeSummary>(runPath(runId, "/microsite"), { method: "POST", body: JSON.stringify(body) }),

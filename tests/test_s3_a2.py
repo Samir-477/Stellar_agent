@@ -77,3 +77,28 @@ def test_a2_grounded_drafts_become_patches_and_invented_ones_dont(tmp_path):
     assert [p.key.split(":")[1] for p in result.patches] == ["lead"]  # only the grounded Rooms draft
     assert "40 rooms" in result.patches[0].after
     assert any("fact guard" in limit for limit in result.coverage.limits)
+
+
+def test_a2_drafts_no_issue_asks_for_are_not_proposed(tmp_path):
+    """Regression (Flipkart run, 2026-09-29): a grounded draft for a section that already opens with its answer
+    was attached to the question-headings finding; when that check passed there was nothing to attach it to,
+    validation dropped the patch and the run finished "with gaps"."""
+    from engine.validation import validate_result
+
+    doc = DOC.replace("<h2>Rooms</h2>", "<h2>What rooms does Grand Agra Hotel have?</h2>")
+    llm = FakeLLM({"a2.sections": {"sections": [
+        {"id": "S1", "opening": "direct", "self_contained": True, "better_format": "none", "question": "", "answer": ""},
+        {"id": "S2", "opening": "direct", "self_contained": True, "better_format": "none",
+         "question": "Where can guests eat at Grand Agra Hotel?",
+         "answer": "The rooftop restaurant at Grand Agra Hotel serves Mughlai and continental food from 7 am to 11 pm "
+                   "for all guests, with seating for sixty people and views across the city at sunset."}]}})
+    store, blobs = MemoryStore(), LocalBlobStore(tmp_path / "b")
+    snap = SnapshotWriter(store, blobs, "s")
+    page = snap.add_page(PageRecord(id="p", snapshot_id="s", url=URL, final_url=URL, status=200))
+    snap.add_evidence("C2", EvidenceType.PAGES_PARSED, {}, page_id=page.id,
+                      blob_key=snap.put_blob("snapshots/s/pages/p/parsed.json", json.dumps(parse_page(doc, URL))))
+    ctx = AgentContext(SnapshotReader(store, blobs, "s"), ClientProfile(id="c", name="x", primary_url=URL), None, llm)
+    agent = AnswerStructure()
+    result, errors = validate_result(agent, agent.run_unit(ctx, agent.plan(ctx)[0]), {URL})
+    assert check_statuses(agent, result.findings)["A2.02"] == St.PASS
+    assert errors == [] and result.patches == []
