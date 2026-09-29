@@ -42,6 +42,7 @@
   --text-5xl: 1.875rem;    --text-5xl--line-height: 1.15;
   --text-6xl: 2.25rem;     --text-6xl--line-height: 1.1;
   --text-7xl: 2.75rem;     --text-7xl--line-height: 1.06;
+  --text-8xl: 3.5rem;      --text-8xl--line-height: 1.02;
 
   --font-display: var(--font-space-grotesk), "Segoe UI", sans-serif;
   --font-sans: var(--font-dm-sans), "Segoe UI", sans-serif;

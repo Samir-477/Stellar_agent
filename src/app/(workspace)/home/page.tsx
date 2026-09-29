@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { AgentCard } from "@/components/workspace/agent-card";
-import { SOURCE_ICONS } from "@/components/workspace/icons";
+import { CollectorExplorer } from "@/components/workspace/collector-explorer";
+import { HomeHero } from "@/components/workspace/home-hero";
 import { RunStatusLabel } from "@/components/workspace/run-status";
 import { engine } from "@/lib/engine";
 import { formatDate, urlPath } from "@/lib/format";
@@ -46,54 +47,7 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* Home opens with a real choice: run one discipline or all three. */}
-      <section className="border-b border-rule bg-canvas" aria-labelledby="home-title">
-        <div className={`${container} grid min-h-[calc(100svh-134px)] gap-12 py-18 lg:min-h-[calc(100svh-72px)] lg:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)] lg:items-center lg:gap-20 lg:py-24`}>
-          <div>
-            <p className="text-sm font-semibold text-signal">Stellar Agents workspace</p>
-            <h1 id="home-title" className="mt-5 max-w-[640px] font-display text-6xl leading-[1.08] font-semibold tracking-[-0.035em] sm:text-7xl">
-              Know what your site shows to search and AI.
-            </h1>
-            <p className="mt-7 max-w-[570px] text-lg leading-[1.7] text-ink-2">
-              Capture the evidence, let independent agents examine it, then review a prioritised diagnosis and a preview of proposed fixes.
-            </p>
-            <div className="mt-9 flex flex-wrap gap-3">
-              <Link href="/runs/new" className="inline-flex min-h-12 items-center gap-2.5 rounded-[3px] bg-signal px-6 text-base font-semibold text-white transition-colors hover:bg-signal-deep">
-                Run all {agents.length} agents <ArrowRight aria-hidden="true" size={16} />
-              </Link>
-              <Link href="/sessions" className="inline-flex min-h-12 items-center rounded-[3px] border border-rule-strong bg-paper px-5 text-base font-medium text-ink transition-colors hover:border-ink-3">
-                View sessions
-              </Link>
-            </div>
-            <p className="mt-8 max-w-[520px] border-l-2 border-rule-strong pl-4 text-sm leading-relaxed text-ink-3">
-              Search results and AI answers are sampled in India and dated. Every finding points back to its source.
-            </p>
-          </div>
-          <section aria-labelledby="choose-scope" className="min-w-0 border border-rule bg-paper">
-            <div className="border-b border-rule px-6 py-5 sm:px-7">
-              <h2 id="choose-scope" className="font-display text-2xl font-semibold tracking-tight">Choose a focus</h2>
-              <p className="mt-1 text-sm text-ink-2">Start with one discipline, or run them together.</p>
-            </div>
-            <div>
-              {PILLAR_ORDER.map((pillar) => {
-                const own = agents.filter((agent) => agent.pillar === pillar);
-                return (
-                  <Link key={pillar} href={`/runs/new?agents=${own.map((agent) => agent.id).join(",")}`}
-                        className="group grid gap-3 border-b border-rule px-6 py-5 transition-colors last:border-b-0 hover:bg-soft/60 sm:grid-cols-[72px_minmax(0,1fr)_20px] sm:items-center sm:px-7">
-                    <span className="font-display text-2xl font-semibold tracking-[-0.03em] text-signal">{PILLARS[pillar].short}</span>
-                    <span className="min-w-0">
-                      <span className="block text-base font-semibold">{PILLARS[pillar].name}</span>
-                      <span className="mt-1 block text-sm leading-relaxed text-ink-2">{PILLARS[pillar].outcome}</span>
-                      <span className="mt-2 block font-mono text-2xs text-ink-3">{own.length} agents · {counts[pillar].checks} checks</span>
-                    </span>
-                    <ArrowRight aria-hidden="true" size={18} className="hidden text-signal transition-transform group-hover:translate-x-1 sm:block" />
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-      </section>
+      <HomeHero agentCount={agents.length} counts={counts} />
 
       {/* Each stage moves the same evidence toward a reviewable change. */}
       <section className="bg-forest text-white" aria-labelledby="run-steps">
@@ -125,37 +79,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Collectors: twelve equal tiles, grouped in order by where the evidence comes from. */}
-      <section className={`${container} py-24`} aria-labelledby="collectors">
-        <SectionIntro id="collectors" title={`${collectors.length} evidence collectors`}>
-          Agents never read each other&apos;s results. They read this evidence, captured for the run, so every finding
-          can be traced to a page, a search result or an AI answer.
-        </SectionIntro>
-        <ul className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {tiles.map((c) => {
-            const Icon = SOURCE_ICONS[c.group];
-            return (
-              <li key={c.id} className="flex flex-col border border-rule bg-paper p-6 transition-colors hover:border-rule-strong">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-2xs font-medium text-ink-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-[4px] bg-soft text-signal">
-                      {Icon && <Icon aria-hidden="true" size={14} strokeWidth={1.8} />}
-                    </span>
-                    {c.group_label}
-                  </span>
-                  <span className="font-mono text-2xs text-signal">{c.id}</span>
-                </div>
-                <h3 className="mt-5 font-display text-xl font-semibold tracking-tight">{c.name}</h3>
-                <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-2">{c.captures}</p>
-                <div className="mt-6 flex items-center justify-between gap-3 border-t border-rule pt-3.5 text-2xs text-ink-3">
-                  <span className="truncate" title={c.services.join(", ")}>{c.services.length ? c.services.join(", ") : "No external service"}</span>
-                  <span className="shrink-0">Read by {c.used_by.length}</span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      <CollectorExplorer collectors={tiles} agentNames={Object.fromEntries(agents.map((a) => [a.id, a.name]))} />
 
       {/* Agents: one band per discipline; hover a card for how it works and an example. */}
       <section className="border-t border-rule bg-canvas" aria-labelledby="agents">
