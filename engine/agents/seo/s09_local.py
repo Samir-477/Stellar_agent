@@ -35,6 +35,8 @@ from engine.schemas import (
 PLACE_TYPES = ("Hotel", "LodgingBusiness", "Resort", "Motel", "Hostel", "BedAndBreakfast", "LocalBusiness",
                "Restaurant", "Store", "BankOrCreditUnion", "FinancialService", "MovingCompany")
 PIN = re.compile(r"\b[1-9]\d{2}\s?\d{3}\b")
+# A store, branch or office page by its address; for a hotel or resort the entry page always is one.
+LOCATION_URL = re.compile(r"/(stores?|store-locator|branch(es)?|locations?|offices?|outlets?)(/|$)", re.I)
 HOURS = re.compile(r"\b\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)\b|\b24\s*[x×/]\s*7\b|check-?in|check-?out|open(?:ing)? hours",
                    re.I)
 DISTANCE = re.compile(r"\b\d+(?:\.\d+)?\s*(?:km|kms|kilomet\w+|minutes?|mins?)\b", re.I)
@@ -91,9 +93,12 @@ class LocalConsistency(Agent):
                                coverage=coverage)
         sources = self._sources(ctx, entry, pages, parts)
         name = business_name(ctx)
-        findings = [self._nap(sources, name, ctx), self._location_pages(entry, pages),
+        located = self._is_location_page(arch, entry, sources)
+        findings = [self._nap(sources, name, ctx),
+                    self._location_pages(entry, pages, arch) if located else self._not_a_location("S9.02"),
                     self._maps(parts.get("places"), arch, ctx), self._local_pack(ctx, name),
-                    self._formats(entry), self._service_area(arch, pages)]
+                    self._formats(entry) if located else self._not_a_location("S9.05"),
+                    self._service_area(arch, pages)]
         rows = [[s.name, s.business or "—", s.city or "—", ", ".join(sorted(s.phones)) or "—"] for s in sources]
         return AgentResult(findings=findings, coverage=coverage,
                            signature_table={"columns": self.signature_columns, "rows": rows})
@@ -129,6 +134,18 @@ class LocalConsistency(Agent):
             out.append(Source("Knowledge Graph", kg.get("title"), kg.get("address"),
                               {digits(kg["phone"])} if kg.get("phone") else set()))
         return out
+
+    @staticmethod
+    def _is_location_page(arch, entry, sources) -> bool:
+        """Location checks (address, hours, map, phone format) are for a place customers visit: a hotel's page,
+        or a store, branch or office page. An online shop's or lender's homepage isn't one."""
+        if arch == "hospitality":
+            return True
+        return bool(LOCATION_URL.search(urlsplit(entry.url).path)) or any(s.name.startswith("schema (") for s in sources)
+
+    def _not_a_location(self, check_id: str):
+        return self.finding(check_id, St.NOT_APPLICABLE, "The entry page isn't a location page (no store, branch "
+                                                         "or office address or place markup)")
 
     # ------------------------------------------------------------ checks
 
@@ -170,12 +187,13 @@ class LocalConsistency(Agent):
                                                                                f"{s.city or '—'}")
                                       for s in sources[:4]])
 
-    def _location_pages(self, entry, pages):
+    def _location_pages(self, entry, pages, arch):
         template = template_blocks([p.model for p in pages])
         text = entry.visible_text() + " " + own_text(entry.model, template)
         links = " ".join(f"{l['text']} {l['href']}" for l in entry.model.get("links", []))
         resources = " ".join(r.get("src") or "" for r in entry.model.get("resources", []))
-        present = {"address": bool(PIN.search(text)), "hours or check-in times": bool(HOURS.search(text)),
+        hours = "hours or check-in times" if arch == "hospitality" else "opening hours"
+        present = {"address": bool(PIN.search(text)), hours: bool(HOURS.search(text)),
                    "map or directions": bool(MAPS.search(links + " " + resources + " " + text)),
                    "local detail (distances)": bool(DISTANCE.search(text))}
         missing = [k for k, ok in present.items() if not ok]
@@ -189,7 +207,7 @@ class LocalConsistency(Agent):
             key_page=True, evidence=evidence, confidence=Confidence.LIKELY,
             impact="Location pages without the basics don't rank for local searches or answer 'where/when' "
                    "questions.",
-            fix="Add the full address with PIN code, opening or check-in hours, and a map link to the page text.",
+            fix=f"Add the full address with PIN code, {hours} and a map link to the page text.",
             verification="Re-run S9.", effort=Effort.S)
 
     def _maps(self, part, arch, ctx):

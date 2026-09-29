@@ -46,12 +46,27 @@ AI_USER_AGENTS = {
 _SKIP_PATH = re.compile(r"^/cdn-cgi/")  # Cloudflare internals (email protection, challenges)
 _SKIP_EXT = re.compile(r"\.(pdf|jpe?g|png|gif|webp|avif|svg|zip|rar|mp4|mp3|docx?|xlsx?|pptx?|css|js|json|xml)$",
                        re.I)
+# Screens nobody reaches from a search: sign-in, account, cart, checkout, settings and site search. Sampling
+# them wastes the crawl cap on pages with nothing to diagnose, and their (correct) noindex reads as a problem.
+_UTILITY_SEGMENTS = {
+    "login", "logout", "signin", "sign-in", "signup", "sign-up", "register", "account", "my-account", "myaccount",
+    "profile", "orders", "cart", "viewcart", "basket", "checkout", "wishlist", "favourites", "favorites",
+    "preferences", "communication-preferences", "settings", "password", "forgot-password", "reset-password",
+    "auth", "oauth", "sso", "search", "searchsuggestion", "unsubscribe", "notifications",
+}
+_TRACKING_PARAM = re.compile(r"^(utm_[a-z]+|gclid|fbclid|msclkid|srsltid|otracker\d*)$", re.I)
 
 
 def normalize_url(url: str) -> str:
+    """Lowercase scheme and host, no fragment, and no tracking parameters (so one page isn't sampled twice)."""
     parts = urlsplit(url.strip())
     path = parts.path or "/"
-    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, parts.query, ""))
+    query = "&".join(p for p in parts.query.split("&") if p and not _TRACKING_PARAM.match(p.split("=", 1)[0]))
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, query, ""))
+
+
+def is_utility(url: str) -> bool:
+    return any(segment.lower() in _UTILITY_SEGMENTS for segment in urlsplit(url).path.split("/") if segment)
 
 
 def _host(url: str) -> str:
@@ -203,7 +218,7 @@ class SiteCrawler(Collector):
         entry_links = extract_links(home.text, home.final_url)
         candidates = [u for u in entry_links + page_urls
                       if _host(u) == site_host and not _SKIP_EXT.search(urlsplit(u).path)
-                      and not _SKIP_PATH.match(urlsplit(u).path)]
+                      and not _SKIP_PATH.match(urlsplit(u).path) and not is_utility(u)]
         sample = choose_sample(normalize_url(home.final_url), candidates, ctx.client.crawl_cap,
                                entry_links=entry_links, site_home=normalize_url(origin))
         snap.add_evidence(self.id, EvidenceType.SITE_FILES,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Minus, X } from "lucide-react";
+import { Check, ChevronRight, Minus, X } from "lucide-react";
 import { useState } from "react";
 import { AgentIcon } from "@/components/workspace/icons";
 import { IssueList } from "@/components/workspace/issue-list";
@@ -137,7 +137,15 @@ function cardsFromReport(report: AgentReport): IssueCard[] {
       fix_type: changes.length ? "code" : "action", changes,
     };
   };
-  return [...report.issues_to_fix.map((i, n) => toCard(i, "fail", n)), ...report.needs_attention.map((i, n) => toCard(i, "warn", n))];
+  const status = report.scope_and_evidence.check_status;
+  return [...report.issues_to_fix.map((i, n) => toCard(i, "fail", n)),
+    ...report.needs_attention.filter((i) => status[i.check_id] !== "unverifiable").map((i, n) => toCard(i, "warn", n))];
+}
+
+/** Checks that had too little evidence to run. Older reports kept them in needs_attention. */
+function uncheckedOf(report: AgentReport): { check_id: string; title: string; reason?: string }[] {
+  const status = report.scope_and_evidence.check_status;
+  return report.could_not_check ?? report.needs_attention.filter((i) => status[i.check_id] === "unverifiable");
 }
 
 export function AgentReportView({ report, question, issues }: { report: AgentReport; question?: string; issues?: IssueCard[] }) {
@@ -146,6 +154,7 @@ export function AgentReportView({ report, question, issues }: { report: AgentRep
   const scope = report.scope_and_evidence;
   const examined = scope.coverage.examined;
   const withCode = cards.filter((c) => c.changes.length).length;
+  const unchecked = uncheckedOf(report);
   return (
     <article>
       <header>
@@ -180,7 +189,26 @@ export function AgentReportView({ report, question, issues }: { report: AgentRep
       </div>
 
       <div className="mt-8">
-        {section === "issues" && <IssueList issues={cards} emptyText="This agent found no issues. Its passed checks are listed under Passed checks." />}
+        {section === "issues" && <>
+          <IssueList issues={cards} emptyText="This agent found no issues. Its passed checks are listed under Passed checks." />
+          {unchecked.length > 0 && (
+            <details className="group mt-8 border border-rule bg-mist [&_summary::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer items-center gap-3 px-5 py-4">
+                <ChevronRight aria-hidden="true" size={16} className="text-ink-3 transition-transform group-open:rotate-90" />
+                <span className="text-sm font-semibold">Couldn&apos;t check</span>
+                <span className="text-xs text-ink-3">{unchecked.length} check{unchecked.length === 1 ? "" : "s"} had too little evidence in this run. These aren&apos;t issues.</span>
+              </summary>
+              <ul className="space-y-2 px-5 pb-5 pl-12 text-sm text-ink-2">
+                {unchecked.map((u, i) => (
+                  <li key={`${u.check_id}-${i}`}>
+                    <span className="mr-2 font-mono text-2xs text-signal">{u.check_id}</span>{u.title}
+                    {u.reason && <span className="text-ink-3"> (needs {u.reason})</span>}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>}
 
         {section === "collected" && <>
           <Section title="What it examined">

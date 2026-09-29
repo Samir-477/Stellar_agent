@@ -24,7 +24,7 @@ def fact(key, value, status, method="llm"):
     return {"key": key, "value": value, "quote": value, "source_url": f"{B}/agra", "status": status, "method": method}
 
 
-def build(tmp_path, archetype="hospitality", places=None):
+def build(tmp_path, archetype="hospitality", places=None, facts=None):
     store, blobs = MemoryStore(), LocalBlobStore(tmp_path / "b")
     snap = SnapshotWriter(store, blobs, "s")
     for i, (url, body) in enumerate(PAGES.items()):
@@ -32,7 +32,7 @@ def build(tmp_path, archetype="hospitality", places=None):
         rec = snap.add_page(PageRecord(id=f"p{i}", snapshot_id="s", url=url, final_url=url, status=200))
         snap.add_evidence("C2", EvidenceType.PAGES_PARSED, {}, page_id=rec.id,
                           blob_key=snap.put_blob(f"snapshots/s/pages/p{i}/parsed.json", json.dumps(parse_page(html, url))))
-    snap.add_evidence("C4", EvidenceType.FACTS, {"facts": [
+    snap.add_evidence("C4", EvidenceType.FACTS, {"facts": facts if facts is not None else [
         fact("property_name", "Grand Agra", "site-stated"), fact("city", "Agra", "site-stated"),
         fact("business_name", "Grand Ayodhya", "schema-declared", "jsonld:Hotel"),  # copied from another property
         fact("city", "Ayodhya", "schema-declared", "jsonld:Hotel"),
@@ -77,3 +77,12 @@ def test_phone_formats_compare_equal_and_missing_maps_fails(tmp_path):
     assert digits("+91 98123 45678") == digits("098123-45678") == "9812345678"
     agent, result = run(tmp_path, places=None)
     assert check_statuses(agent, result.findings)["S9.03"] == St.FAIL
+
+
+def test_an_online_shop_homepage_is_not_asked_for_an_address_or_hours(tmp_path):
+    """Regression (Flipkart run, 2026-09-29): a retail homepage was told it lacked a PIN code, a map and
+    check-in times. Location checks apply to hotel pages and to store, branch or office pages only."""
+    agent, result = run(tmp_path, archetype="retail", places=None,
+                        facts=[fact("business_name", "Grand Agra", "site-stated")])
+    statuses = check_statuses(agent, result.findings)
+    assert statuses["S9.02"] == statuses["S9.05"] == St.NOT_APPLICABLE

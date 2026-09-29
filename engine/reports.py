@@ -37,8 +37,11 @@ def build_agent_report(agent: Agent, result: AgentResult) -> AgentReport:
 
     fails = sorted((f for f in result.findings if f.status == CheckStatus.FAIL),
                    key=lambda f: (_SEVERITY_RANK[f.severity], -len(f.scope.pages)))
-    attention = [f for f in result.findings if f.status in (CheckStatus.WARN, CheckStatus.UNVERIFIABLE)
+    attention = [f for f in result.findings if f.status == CheckStatus.WARN
                  or (f.status == CheckStatus.FAIL and f.confidence == Confidence.HYPOTHESIS)]
+    # A check that couldn't run is not an issue: listing it with the issues made every report look alike.
+    unchecked = [{"check_id": f.check_id, "title": f.title, "reason": "; ".join(f.missing_facts)}
+                 for f in result.findings if f.status == CheckStatus.UNVERIFIABLE]
     fails = [f for f in fails if f.confidence != Confidence.HYPOTHESIS]
     passes = [f for f in result.findings if f.status == CheckStatus.PASS]
 
@@ -69,6 +72,7 @@ def build_agent_report(agent: Agent, result: AgentResult) -> AgentReport:
         needs_attention=[_item(f) for f in attention],
         whats_working=[{"check_id": f.check_id, "title": f.title,
                         "evidence": [e.model_dump(exclude_none=True) for e in f.evidence[:2]]} for f in passes],
+        could_not_check=unchecked,
         proposed_changes=[p.model_dump(exclude_none=True) for p in result.patches],
         missing_facts_and_next_checks=next_checks,
     )

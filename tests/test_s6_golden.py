@@ -67,6 +67,21 @@ def test_s6_benchmarks_against_top_competitor_pages(tmp_path):
     assert not agent.counts_toward_readiness and all(not c.counts_toward_readiness for c in agent.checks)
 
 
+def test_s6_with_only_brand_searches_cannot_judge_visibility(tmp_path):
+    """Regression (Flipkart and Navarasa runs, 2026-09-29): with only the brand search captured, S6.01 was a
+    warning about "0 non-brand searches" with no evidence, which validation dropped on every run."""
+    store, blobs = MemoryStore(), LocalBlobStore(tmp_path / "b")
+    snap = SnapshotWriter(store, blobs, "s")
+    snap.add_evidence("C6", EvidenceType.SERP, {"query": "grand agra", "intent": "brand", "client_position": 1,
+                                                "organic": [{"domain": "grand.example"}]})
+    agent = SerpLandscape()
+    ctx = AgentContext(SnapshotReader(store, blobs, "s"), ClientProfile(id="c", name="Grand", primary_url=f"{B}/agra"),
+                       None, None)
+    result, errors = validate_result(agent, agent.run_unit(ctx, agent.plan(ctx)[0]), {f"{B}/agra"})
+    assert errors == []
+    assert check_statuses(agent, result.findings)["S6.01"] == St.UNVERIFIABLE
+
+
 def test_elements_are_read_from_text_and_schema():
     model = parse_page(html(RIVAL.format(name="Rival")), "https://rival.example/")
     assert {"prices in the text", "address with PIN code", "ratings in structured data", "schema: Hotel"} <= elements(model)

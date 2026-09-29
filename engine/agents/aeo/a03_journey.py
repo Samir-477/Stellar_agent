@@ -314,26 +314,27 @@ class JourneyCoverage(Agent):
     def _paths(self, entry: PageView, book_tools: list[CriticalTool]):
         if not book_tools:
             return self.finding("A3.03", St.NOT_APPLICABLE, "No book-stage tool defined for this archetype")
+        step = " or ".join(t.label for t in book_tools)  # "booking engine or enquiry form", "add to cart and checkout"
         body = next((hit for t in book_tools for hit in (input_hit(entry, t.controls),
                                                         cta_hit(entry, t.links, body_only=True)) if hit), None)
         if body:
-            return self.finding("A3.03", St.PASS, "The entry page leads on to booking from its content",
+            return self.finding("A3.03", St.PASS, f"The entry page leads on to {step} from its content",
                                 pages=[entry.url], evidence=[EvidenceRef(type="html_excerpt", url=entry.url,
                                                                          excerpt=body)])
         menu = next((hit for t in book_tools if (hit := cta_hit(entry, t.links))), None)
         if menu:
             return self.finding(
-                "A3.03", St.WARN, "The entry page's only way to book is in the menu", pages=[entry.url],
+                "A3.03", St.WARN, f"The entry page's only way on to {step} is in the menu", pages=[entry.url],
                 evidence=[EvidenceRef(type="html_excerpt", url=entry.url, excerpt=menu)],
                 impact="Visitors who have just read about the offer look for the next step in the content, "
-                       "not the menu.", fix="Add a clear call to action (e.g. 'Book this room') next to rooms, "
-                                            "prices and at the end of the page.",
+                       "not the menu.", fix=f"Add a clear call to action for {step} next to the offer and prices "
+                                            "and at the end of the page.",
                 verification="A body call to action leads to the book stage.", effort=Effort.S)
         return self.finding(
-            "A3.03", St.FAIL, "The entry page is a dead end: no way on to booking", pages=[entry.url], key_page=True,
+            "A3.03", St.FAIL, f"The entry page is a dead end: no way on to {step}", pages=[entry.url], key_page=True,
             evidence=[EvidenceRef(type="html_excerpt", url=entry.url,
                                   excerpt="no " + " / ".join(t.label for t in book_tools) + " link, button or form")],
-            impact="Visitors ready to act have nowhere to go.", fix="Add a booking or enquiry call to action.",
+            impact="Visitors ready to act have nowhere to go.", fix=f"Add a call to action for {step}.",
             verification="A call to action leads to the book stage.", effort=Effort.S)
 
     def _demand(self, stages: list[Stage]):

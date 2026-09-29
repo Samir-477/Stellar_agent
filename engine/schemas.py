@@ -174,6 +174,7 @@ class AgentReport(BaseModel):
     issues_to_fix: list[dict[str, Any]]
     needs_attention: list[dict[str, Any]]
     whats_working: list[dict[str, Any]]
+    could_not_check: list[dict[str, Any]] = []  # checks without enough evidence: not issues, listed apart
     proposed_changes: list[dict[str, Any]]
     missing_facts_and_next_checks: list[str]
 

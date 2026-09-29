@@ -150,7 +150,7 @@ PACKS: dict[str, ArchetypePack] = {
             CriticalTool("shipping_returns", "shipping and returns information", "plan",
                          links=r"shipping|delivery|returns?|refund|exchange"),
             CriticalTool("cart", "add to cart and checkout", "book", controls=r"add to (cart|bag)|buy now",
-                         links=r"/cart|checkout"),
+                         links=r"cart|checkout|basket|/bag\b"),
             CriticalTool("tracking", "order tracking", "manage", controls=r"order ?(id|number)",
                          links=r"track (your )?order|order status")),
         trust_items=(TrustItem("legal_entity", "legal entity name and address", "disclosure", core=True,

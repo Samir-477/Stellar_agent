@@ -195,6 +195,7 @@ export type AgentReport = {
   issues_to_fix: ReportIssue[];
   needs_attention: ReportIssue[];
   whats_working: { check_id: string; title: string; evidence?: Evidence[] }[];
+  could_not_check?: { check_id: string; title: string; reason: string }[]; // absent in reports before 2026-09-29
   proposed_changes: Patch[];
   missing_facts_and_next_checks: string[];
 };

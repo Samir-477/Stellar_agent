@@ -123,7 +123,11 @@ class SerpLandscape(Agent):
         if not serps:
             return self.finding("S6.01", St.UNVERIFIABLE, "No search results captured")
         non_brand = {q: ev.payload for q, ev in serps.items() if ev.payload.get("intent") != "brand"}
-        ranked = {q: p["client_position"] for q, p in non_brand.items() if p.get("client_position")}
+        if not non_brand:
+            # Only the brand search was captured (the query set had no customer searches, e.g. with the LLM off).
+            return self.finding("S6.01", St.UNVERIFIABLE, "Only brand searches were captured, so visibility on "
+                                                          "customer searches can't be judged")
+        ranked ={q: p["client_position"] for q, p in non_brand.items() if p.get("client_position")}
         evidence = [EvidenceRef(type="serp", excerpt=f"\"{q}\": " + (f"#{p['client_position']}"
                                                                    if p.get("client_position") else "not in top 10"))
                     for q, p in list(non_brand.items())[:6]]
