@@ -4,11 +4,14 @@
       <stop stop-color="#FFFFFF"/>
       <stop offset="1" stop-color="#DDF3E6"/>
     </linearGradient>
-    <linearGradient id="sa-spark" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+    <linearGradient id="sa-green" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
       <stop stop-color="#12A063"/>
       <stop offset="1" stop-color="#00633A"/>
     </linearGradient>
   </defs>
   <rect x=".75" y=".75" width="62.5" height="62.5" rx="15" fill="url(#sa-tile)" stroke="#BED8C6" stroke-width="1.5"/>
-  <path d="M32 15C34.04 27.51 36.49 29.96 49 32C36.49 34.04 34.04 36.49 32 49C29.96 36.49 27.51 34.04 15 32C27.51 29.96 29.96 27.51 32 15Z" fill="url(#sa-spark)"/>
+  <path d="M32 11a21 21 0 1 1-21 21" stroke="url(#sa-green)" stroke-width="3.4" stroke-linecap="round"/>
+  <circle cx="11" cy="32" r="3.2" fill="#12A063"/>
+  <circle cx="32" cy="32" r="12" stroke="#12A063" stroke-opacity=".45" stroke-width="3"/>
+  <circle cx="32" cy="32" r="6" fill="url(#sa-green)"/>
 </svg>

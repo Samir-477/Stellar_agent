@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { site } from "@/lib/site";
 
-/** The mark (a green spark on a light tile) with the name on two lines: "Stellar" over "Agents". */
+/** The mark (a pulse beacon on a light tile) with the name on two lines: "Stellar" over "Agents". */
 export function Brand({ tone = "light", size = "md" }: { tone?: "light" | "dark"; size?: "md" | "lg" }) {
   const [first, ...rest] = site.name.split(" ");
   const markSize = size === "lg" ? 52 : 44;
