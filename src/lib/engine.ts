@@ -78,9 +78,12 @@ async function optional<T>(promise: Promise<T>): Promise<T | null> {
   }
 }
 
+// Bump when the catalog's shape changes, so a new deploy doesn't serve an hour-old cached copy.
+const CATALOG_VERSION = 2;
+
 export const engine = {
   // The agent and collector catalog only changes with a deploy, so it is cached for an hour.
-  agents: () => call<AgentInfo[]>("/agents", { next: { revalidate: 3600 } }),
+  agents: () => call<AgentInfo[]>(`/agents?catalog=${CATALOG_VERSION}`, { next: { revalidate: 3600 } }),
   collectors: () => call<CollectorInfo[]>("/collectors", { next: { revalidate: 3600 } }),
   runs: (limit = 50) => call<RunSummary[]>(`/runs?limit=${limit}`),
   deleteRun: (runId: string) => call<{ run_id: string; deleted: boolean }>(runPath(runId), { method: "DELETE" }),
