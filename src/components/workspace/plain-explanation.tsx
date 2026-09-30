@@ -20,17 +20,17 @@ export function PlainExplanation({ plain, compact = false, hideAction = false }:
     <section aria-label="In plain words" className={`@container rounded-[6px] border border-signal/20 bg-soft/40 ${compact ? "px-4 py-4" : "px-6 py-5"}`}>
       <p className="flex items-center gap-2 text-xs font-semibold text-signal"><BookOpen aria-hidden="true" size={14} /> In plain words</p>
       <dl className={`mt-3 ${compact ? "space-y-3" : "space-y-3.5"}`}>
-        <Row label="What this means">{plain.meaning}</Row>
+        {plain.meaning && <Row label="What this means">{plain.meaning}</Row>}
         {plain.why && <Row label="Why it matters">{plain.why}</Row>}
         {plain.analogy && (
           <Row label="Think of it like">
             <span className="inline-flex gap-2"><Lightbulb aria-hidden="true" size={16} className="mt-1 shrink-0 text-amber" />{plain.analogy}</span>
           </Row>
         )}
-        <Row label="On your site">
+        {plain.site_case && <Row label="On your site">
           {plain.site_case}
           {plain.case_source === "rules" && <span className="mt-0.5 block text-2xs text-ink-3">Taken directly from the evidence below.</span>}
-        </Row>
+        </Row>}
         {plain.action && !hideAction && <Row label="What to do">{plain.action}</Row>}
       </dl>
     </section>

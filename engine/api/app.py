@@ -23,7 +23,7 @@ from engine.orchestrator.runner import dispatch, make_env, run_inline, trigger_d
 from engine.orchestrator.executor import execute_task
 from engine.output import preview
 from engine.output.bundle import build_preview as build_preview_bundle
-from engine.output.microsite import build_microsite
+from engine.output.microsite import build_microsite, complete_issues
 from engine.output.page_review import ReviewError
 from engine.output.snippet_cache import run_snippets
 from engine.registry import AGENTS, COLLECTORS, agent_collectors, collectors_for
@@ -304,7 +304,7 @@ def _live(slug: str) -> dict:
 @app.get("/api/v1/microsites/live", dependencies=[api])
 def live_microsite(slug: str) -> dict:
     """The live version at an address, without storage keys (the page HTML is fetched separately)."""
-    return {k: v for k, v in _live(slug).items() if not k.endswith("_key")}
+    return {k: v for k, v in complete_issues(_live(slug)).items() if not k.endswith("_key")}
 
 
 @app.get("/api/v1/microsites/live/html", dependencies=[api])

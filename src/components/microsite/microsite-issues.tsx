@@ -33,10 +33,12 @@ function IssueItem({ issue, open, onToggle, wide }: { issue: MicrositeIssue; ope
               ) : null}
             </>
           ) : (
-            <>
-              {issue.impact && <p><span className="font-semibold text-ink">Why it matters: </span><span className="text-ink-2">{issue.impact}</span></p>}
-              <p><span className="font-semibold text-ink">{issue.fixed ? "What we changed: " : "What to do: "}</span><span className="text-ink-2">{issue.fix}</span></p>
-            </>
+            // No plain words for this check: the agent's own explanation, in the same box.
+            <PlainExplanation compact plain={{
+              name: issue.title, problem: issue.title, meaning: "", why: issue.impact, analogy: "",
+              action: issue.fixed ? `Done in this preview: ${lowerFirst(issue.fix)}` : issue.fix,
+              site_case: "", case_source: "rules", terms: [],
+            }} />
           )}
           {(plain || issue.changes.length > 0) && (
             <details className="group [&_summary::-webkit-details-marker]:hidden">

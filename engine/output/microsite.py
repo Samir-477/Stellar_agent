@@ -18,6 +18,7 @@ from lxml import html as lxml_html
 from engine.core.blobstore import BlobStore
 from engine.orchestrator import repo
 from engine.output.page_review import ReviewError, review_entry_page
+from engine.plain import explain, issue_key
 from engine.store import Store
 
 ARCHETYPES = ("hospitality", "loans", "retail", "logistics")
@@ -69,3 +70,32 @@ def build_microsite(run_id: str, store: Store, blobs: BlobStore, *, client_slug:
         "published_by": published_by,
     }
     return repo.insert_microsite(record)
+
+
+def complete_issues(row: dict) -> dict:
+    """A microsite published before plain words and fix steps existed stores its issues without them. Fill them in
+    from the run's own findings when it's served, so every microsite explains its issues the same way; the
+    published issues themselves (which, what was fixed, the code) are unchanged."""
+    issues = row.get("issues") or []
+    if all((i.get("plain") or {}).get("steps") is not None for i in issues):
+        return row
+    run_id = str(row["run_id"]) if row.get("run_id") else None
+    findings = repo.list_findings(run_id) if run_id and repo.run_exists(run_id) else []
+    cases = ((repo.get_intelligence_report(run_id) or {}).get("plain_cases") or {}) if findings else {}
+    by_title = {(f["check_id"], f.get("title")): f for f in findings}
+    by_check = {f["check_id"]: f for f in findings if f["status"] in ("fail", "warn")}
+    completed = []
+    for issue in issues:
+        if (issue.get("plain") or {}).get("steps") is not None:
+            completed.append(issue)
+            continue
+        finding = by_title.get((issue["check_id"], issue.get("title"))) or by_check.get(issue["check_id"])
+        if finding:
+            plain = explain(finding, cases.get(issue_key(finding)))
+            extra = {"verification": finding.get("verification", ""), "effort": finding.get("effort")}
+        else:  # the run is gone: the library's words, without a site sentence we can't back up
+            plain = {**explain({"check_id": issue["check_id"], "title": issue.get("title", ""),
+                                "fix": issue.get("fix", ""), "impact": issue.get("impact", "")}), "site_case": ""}
+            extra = {}
+        completed.append({**extra, **issue, "plain": plain})
+    return {**row, "issues": completed}
