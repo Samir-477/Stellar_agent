@@ -3,7 +3,7 @@
 import { ArrowRight, ChevronRight, CircleAlert, CircleCheck, CodeXml, FileText, Hammer, Lightbulb, Radar, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { CodeDiff, changeTypeLabel } from "@/components/workspace/code-diff";
-import { TermsUsed } from "@/components/workspace/plain-explanation";
+import { EFFORT_LABEL, OwnerChip, StepList, TermsUsed } from "@/components/workspace/plain-explanation";
 import { ConfidenceLabel, SeverityLabel } from "@/components/workspace/status";
 import { plural, urlPath } from "@/lib/format";
 import type { FixType, IssueCard, PlainExplanation } from "@/lib/types";
@@ -15,8 +15,6 @@ export const FIX_TYPES: Record<FixType, { label: string; note: string; tone: str
   action: { label: "Action plan", note: "Fixed outside the page's HTML: in the site's code, hosting, or other platforms.", tone: "border-rule-strong bg-mist text-ink-2", Icon: Hammer },
   observation: { label: "Observation", note: "A dated sample of search results or AI answers to monitor. It is not a defect on the page.", tone: "border-rule bg-paper text-ink-3", Icon: Radar },
 };
-
-const EFFORT = { S: "Small job", M: "Medium job", L: "Large job" } as const;
 
 export function FixTypeBadge({ type }: { type: FixType }) {
   const t = FIX_TYPES[type];
@@ -74,10 +72,12 @@ function WhatToDo({ issue, plain }: { issue: IssueCard; plain: PlainExplanation 
         <BriefTitle>What to do</BriefTitle>
         <span className="flex flex-wrap items-center gap-2">
           <FixTypeBadge type={issue.fix_type} />
-          {issue.effort && <span className="rounded-[3px] border border-rule-strong bg-paper px-2 py-0.5 text-2xs font-semibold text-ink-2">{EFFORT[issue.effort]}</span>}
+          {plain.owner && <OwnerChip owner={plain.owner} />}
+          {issue.effort && <span className="rounded-[3px] border border-rule-strong bg-paper px-2 py-0.5 text-2xs font-semibold text-ink-2">{EFFORT_LABEL[issue.effort]}</span>}
         </span>
       </div>
       <p className="mt-2 text-lg leading-relaxed font-medium text-ink">{plain.action || issue.fix}</p>
+      {plain.steps && plain.steps.length > 0 && <div className="mt-3"><StepList steps={plain.steps} /></div>}
       {issue.missing_facts.length > 0 && (
         <div className="mt-3">
           <p className="text-xs font-semibold text-amber">We need from you</p>

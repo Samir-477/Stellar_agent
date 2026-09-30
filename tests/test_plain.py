@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from engine.llm import LLMError
 from engine.plain import LIBRARY, Case, Cases, explain, issue_key, site_cases, terms_in, valid_case
+from engine.fix_steps import STEPS, pages_phrase
 from engine.registry import AGENTS
 
 INP = {"agent_id": "S2", "agent_version": "1", "check_id": "S2.02", "pillar": "seo", "status": "fail",
@@ -22,6 +23,21 @@ def test_every_check_has_a_complete_plain_entry():
             assert getattr(entry, field).strip(), (check_id, field)
         # The plain problem heading never uses the metric shorthand the technical title does.
         assert not any(term in entry.problem for term in ("INP", "LCP", "CLS", "TTFB", "JSON-LD", "SERP")), check_id
+
+
+def test_every_check_has_fix_steps_with_an_owner():
+    assert set(STEPS) == set(LIBRARY)
+    for check_id, fix in STEPS.items():
+        assert fix.owner and 2 <= len(fix.steps) <= 4, check_id
+        assert all(s.strip().endswith((".", ")")) for s in fix.steps), check_id
+
+
+def test_fix_steps_name_the_issue_s_own_pages():
+    plain = explain(INP)
+    assert plain["owner"] == "Developer"
+    assert plain["steps"][0].startswith("Open /gold-loan, /top-up and 1 more in PageSpeed Insights")
+    assert pages_phrase([]) == "the affected pages" and pages_phrase(["https://x.example/"]) == "x.example"
+    assert explain({**INP, "check_id": "Z9.99"})["steps"] == []  # an unknown check gets no invented steps
 
 
 def test_explanation_carries_the_library_the_site_case_and_the_terms():

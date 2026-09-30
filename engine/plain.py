@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 
+from engine.fix_steps import fix_steps
 from engine.llm import LLMClient, LLMError, load_prompt
 from engine.schemas import Finding, fingerprint_of
 
@@ -835,8 +836,9 @@ def explain(finding: dict, case: str | None = None) -> dict:
     base = asdict(item) if item else {
         "name": finding.get("title", ""), "problem": finding.get("title", ""), "meaning": finding.get("impact", ""),
         "why": "", "analogy": "", "action": finding.get("fix", "")}
+    how = fix_steps(finding)
     return {**base, "site_case": case or fallback_case(finding), "case_source": "model" if case else "rules",
-            "terms": terms_in(technical)}
+            "terms": terms_in(technical, *how["steps"]), **how}
 
 
 # ----------------------------------------------------------------- per-run site cases (one model call)

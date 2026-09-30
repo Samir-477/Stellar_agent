@@ -3,7 +3,7 @@
 import { Check, ChevronDown, ChevronRight, CircleDashed } from "lucide-react";
 import { useState } from "react";
 import { CodeDiff } from "@/components/workspace/code-diff";
-import { PlainExplanation, TermsUsed } from "@/components/workspace/plain-explanation";
+import { FixPlan, PlainExplanation, TermsUsed } from "@/components/workspace/plain-explanation";
 import type { MicrositeIssue } from "@/lib/types";
 
 function IssueItem({ issue, open, onToggle, wide }: { issue: MicrositeIssue; open: boolean; onToggle: () => void; wide: boolean }) {
@@ -23,8 +23,15 @@ function IssueItem({ issue, open, onToggle, wide }: { issue: MicrositeIssue; ope
       </button>
       {open && (
         <div className="space-y-4 px-5 pb-6 pl-[54px] text-sm leading-relaxed">
-          {plain ? (
-            <PlainExplanation plain={issue.fixed ? { ...plain, action: `Done in this preview: ${lowerFirst(plain.action)}` } : plain} compact />
+          {plain && issue.fixed ? (
+            <PlainExplanation plain={{ ...plain, action: `Done in this preview: ${lowerFirst(plain.action)}` }} compact />
+          ) : plain ? (
+            <>
+              <PlainExplanation plain={plain} compact hideAction={!!plain.steps?.length} />
+              {plain.steps?.length ? (
+                <FixPlan action={plain.action} steps={plain.steps} owner={plain.owner} effort={issue.effort} verification={issue.verification} />
+              ) : null}
+            </>
           ) : (
             <>
               {issue.impact && <p><span className="font-semibold text-ink">Why it matters: </span><span className="text-ink-2">{issue.impact}</span></p>}

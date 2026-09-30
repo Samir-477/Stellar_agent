@@ -30,6 +30,8 @@ export type PlainExplanation = PlainEntry & {
   site_case: string; // this site's own case: written by the model and checked, or a template
   case_source: "model" | "rules";
   terms: PlainTerm[]; // technical terms used in the technical details, explained
+  owner?: string; // who does the fix (engine/fix_steps.py); absent in previews built before 2026-09-30
+  steps?: string[]; // how to fix it, with the issue's own pages filled in
 };
 
 export type AgentInfo = {
@@ -315,6 +317,8 @@ export type MicrositeIssue = {
   impact: string;
   fix: string;
   fix_type: FixType;
+  verification?: string; // absent in previews built before 2026-09-30
+  effort?: "S" | "M" | "L" | null;
   fixed: boolean;
   changes: Pick<CodeChange, "type" | "language" | "before" | "after" | "before_segments" | "after_segments" | "note">[];
   plain?: PlainExplanation; // absent in microsites published before 2026-09-29

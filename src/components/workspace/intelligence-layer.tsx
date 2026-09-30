@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Check, ChevronRight, Lightbulb, Radar } from "lucide-react";
+import { ArrowRight, Check, Lightbulb, Radar } from "lucide-react";
 import { PILLARS, PILLAR_ORDER } from "@/lib/pillars";
 import { GapsPanel } from "@/components/workspace/gaps-panel";
 import type { ClientPriority, IntelligenceReport, Lane, Pillar, PlainEntry, RunGaps, WorkItem } from "@/lib/types";
@@ -166,13 +166,10 @@ export function IntelligenceLayer({ runId, report, agentNames, plainByCheck = {}
       </section>
 
       {gaps ? <GapsPanel gaps={gaps} /> : unchecked.length > 0 && (
-        <details className="group border border-rule bg-mist [&_summary::-webkit-details-marker]:hidden">
-          <summary className="flex cursor-pointer items-center gap-3 px-6 py-5">
-            <ChevronRight aria-hidden="true" size={16} className="text-ink-3 transition-transform group-open:rotate-90" />
-            <span className="text-base font-semibold">What we couldn&apos;t check</span>
-            <span className="text-sm text-ink-3">{unchecked.length} checks had too little evidence in this run</span>
-          </summary>
-          <ul className="grid gap-x-10 gap-y-2 px-6 pb-6 pl-14 text-sm text-ink-2 md:grid-cols-2">
+        <section aria-labelledby="unchecked-heading" className="border border-rule bg-mist px-6 py-5">
+          <h2 id="unchecked-heading" className="font-display text-2xl font-semibold tracking-[-0.01em]">What we couldn&apos;t check</h2>
+          <p className="mt-1 text-sm text-ink-3">{unchecked.length} checks had too little evidence in this run</p>
+          <ul className="mt-4 grid gap-x-10 gap-y-2 text-sm text-ink-2 md:grid-cols-2">
             {unchecked.map((a) => (
               <li key={a.id}>
                 {plainOf(a.check_id)?.name ?? a.title}
@@ -180,7 +177,7 @@ export function IntelligenceLayer({ runId, report, agentNames, plainByCheck = {}
               </li>
             ))}
           </ul>
-        </details>
+        </section>
       )}
     </div>
   );
