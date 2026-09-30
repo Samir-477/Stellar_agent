@@ -6,8 +6,8 @@ import type { PlainExplanation as Plain, PlainTerm } from "@/lib/types";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-5">
-      <dt className="text-xs font-semibold text-ink-3 sm:pt-0.5">{label}</dt>
+    <div className="grid gap-1 @md:grid-cols-[150px_minmax(0,1fr)] @md:gap-5">
+      <dt className="text-xs font-semibold text-ink-3 @md:pt-0.5">{label}</dt>
       <dd className="text-base leading-relaxed text-ink">{children}</dd>
     </div>
   );
@@ -15,7 +15,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export function PlainExplanation({ plain, compact = false }: { plain: Plain; compact?: boolean }) {
   return (
-    <section aria-label="In plain words" className={`rounded-[6px] border border-signal/20 bg-soft/40 ${compact ? "px-4 py-4" : "px-6 py-5"}`}>
+    <section aria-label="In plain words" className={`@container rounded-[6px] border border-signal/20 bg-soft/40 ${compact ? "px-4 py-4" : "px-6 py-5"}`}>
       <p className="flex items-center gap-2 text-xs font-semibold text-signal"><BookOpen aria-hidden="true" size={14} /> In plain words</p>
       <dl className={`mt-3 ${compact ? "space-y-3" : "space-y-3.5"}`}>
         <Row label="What this means">{plain.meaning}</Row>
@@ -39,13 +39,13 @@ export function PlainExplanation({ plain, compact = false }: { plain: Plain; com
 export function TermsUsed({ terms }: { terms: PlainTerm[] }) {
   if (!terms.length) return null;
   return (
-    <dl className="grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
+    <div className="@container"><dl className="grid gap-x-8 gap-y-2.5 @lg:grid-cols-2">
       {terms.map((t) => (
         <div key={t.term} className="text-sm leading-snug">
           <dt className="inline font-semibold text-ink">{t.term}: </dt>
           <dd className="inline text-ink-2">{t.meaning}</dd>
         </div>
       ))}
-    </dl>
+    </dl></div>
   );
 }

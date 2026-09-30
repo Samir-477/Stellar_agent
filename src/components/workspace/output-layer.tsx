@@ -6,6 +6,7 @@ import { Check, ExternalLink, Globe, RefreshCw, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MicrositeIssues } from "@/components/microsite/microsite-issues";
 import { PreviewFrame } from "@/components/workspace/preview-frame";
+import { SplitPane } from "@/components/workspace/split-pane";
 import { formatDate, urlPath } from "@/lib/format";
 import { ARCHETYPE_LABEL, micrositeHref, pagePath, sameUrl, slugify } from "@/lib/microsite";
 import type { MicrositeSummary, Preview } from "@/lib/types";
@@ -193,14 +194,15 @@ export function OutputLayer({ runId, initial, entryUrl, archetype, clientName, l
               </button>
             </div>
           ) : page ? (
-            <div className="grid gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-              <div className="min-w-0"><PreviewFrame views={page.views} pageUrl={page.url} /></div>
-              <aside aria-label="Technical details" className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-120px)] lg:self-start lg:overflow-y-auto">
-                {preview?.issues
-                  ? <MicrositeIssues issues={preview.issues} wide />
-                  : <p className="border border-rule bg-mist px-5 py-6 text-sm text-ink-2">This preview was built before the technical details were saved with it. Choose Rebuild preview to add them.</p>}
-              </aside>
-            </div>
+            <SplitPane storageKey="stellar.output-split" label="Resize the preview"
+              left={<PreviewFrame views={page.views} pageUrl={page.url} />}
+              right={
+                <aside aria-label="Technical details" className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-120px)] lg:self-start lg:overflow-y-auto">
+                  {preview?.issues
+                    ? <MicrositeIssues issues={preview.issues} wide />
+                    : <p className="border border-rule bg-mist px-5 py-6 text-sm text-ink-2">This preview was built before the technical details were saved with it. Choose Rebuild preview to add them.</p>}
+                </aside>
+              } />
           ) : (
             <p className="border border-rule bg-mist px-6 py-8 text-base text-ink-2">
               The preview has no version of the diagnosed page, because no change was proposed for it. Changes on other sampled pages are in the Agents layer.

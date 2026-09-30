@@ -72,7 +72,7 @@ export function CodeDiff({ before, after, beforeSegments, afterSegments, languag
   );
 
   return (
-    <div className="border border-rule bg-paper">
+    <div className="@container border border-rule bg-paper">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule bg-mist px-4 py-2">
         <span className="font-mono text-2xs text-ink-3 uppercase">{language}</span>
         <div className="flex items-center gap-1">
@@ -92,7 +92,7 @@ export function CodeDiff({ before, after, beforeSegments, afterSegments, languag
           )}
         </div>
       </div>
-      <div className={mode === "split" ? "grid md:grid-cols-2 md:divide-x md:divide-rule" : "divide-y divide-rule"}>
+      <div className={mode === "split" ? "grid divide-y divide-rule @xl:grid-cols-2 @xl:divide-x @xl:divide-y-0" : "divide-y divide-rule"}>
         {beforePane}
         {afterPane}
       </div>
