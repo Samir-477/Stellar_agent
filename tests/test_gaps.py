@@ -32,9 +32,12 @@ def test_checks_are_grouped_by_cause_with_a_fix_that_fits_the_run():
              finding("S10.01", "About page is linked but wasn't in the sample", "S10"),
              finding("A1.03", "Accuracy against the Fact Sheet is not checked in this version", "A1"),
              finding("S3.03", "Title relevance not judged (LLM unavailable)"),
-             finding("G3.01", "No category answers captured", "G3")]
+             finding("G3.01", "No category answers captured", "G3"),
+             finding("G5.03", "No key facts for this type of business found on the site to compare (such as loan "
+                              "types)", "G5")]
     groups = {g["cause"]: g for g in check_gaps(found, model_calls=0)}
-    assert list(groups) == ["renderer", "cited", "competitors", "sample", "version", "ai"]
+    assert list(groups) == ["renderer", "cited", "competitors", "sample", "version", "facts", "ai"]
+    assert groups["facts"]["who"] == "you"
     assert groups["cited"]["who"] == "us" and len(groups["competitors"]["items"]) == 1
     assert "AI review on" in groups["competitors"]["fix"]
     assert groups["ai"]["fix"] == "Run the diagnosis again: AI review is on now." and len(groups["ai"]["items"]) == 2

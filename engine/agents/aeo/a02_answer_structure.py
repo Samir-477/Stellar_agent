@@ -122,7 +122,7 @@ class AnswerStructure(Agent):
             evidence=[EvidenceRef(type="html_excerpt", url=p.url,
                                   excerpt="headings: " + ", ".join(s["heading"] for s in page_sections[p.url][:6]))
                       for p in without[:3]],
-            impact="Label headings (\"Rooms\", \"Amenities\") don't match how people search or ask assistants, so "
+            impact="Label headings (\"Overview\", \"Features\") don't match how people search or ask assistants, so "
                    "answer engines find it harder to lift a direct answer.",
             fix="Rephrase key section headings as the questions customers ask, with the answer right below.",
             verification="Key sections have question-style headings followed by a direct answer.", effort=Effort.S)]
@@ -262,7 +262,7 @@ class AnswerStructure(Agent):
             pages=sorted({p.url for p, _ in not_contained}), confidence=Confidence.LIKELY,
             evidence=[EvidenceRef(type="html_excerpt", url=p.url, excerpt=f"\"{s['heading']}\"") for p, s in not_contained[:5]],
             impact="Quoted alone, these passages don't say what they're about, so they're less useful as answers.",
-            fix="Name the subject (the property, product or service) inside each section.",
+            fix="Name the subject (the business, product or service) inside each section.",
             verification="Each section makes sense when quoted alone.") if not_contained
             else self.finding("A2.03", St.PASS, "Reviewed sections make sense when quoted alone",
                               confidence=Confidence.LIKELY))

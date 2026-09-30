@@ -249,9 +249,9 @@ class EEATTrust(Agent):
                          ok="Privacy, terms and the expected policies are stated",
                          bad="policies missing or incomplete",
                          impact="Customers and search engines look for clear policies before trusting a business; "
-                                "missing ones cost bookings and trust signals.",
+                                "missing ones cost customers and trust signals.",
                          fix="Publish each policy in plain text on its own page (or a clear section) and link it "
-                             "from the footer and the booking flow."),
+                             "from the footer and the checkout, booking or application steps."),
             self._rollup("S10.06", by_kind["disclosure"], fail_on="core",
                          severity=Sev.CRITICAL if loans else None, tags=["compliance-review"],
                          ok="The disclosures expected for this archetype are present",

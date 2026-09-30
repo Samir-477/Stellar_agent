@@ -179,7 +179,7 @@ class LocalConsistency(Agent):
             return self.finding(
                 "S9.01", St.WARN, "Phone numbers differ between the site and " + ", ".join(s.name for s in phones),
                 pages=[site.url], evidence=evidence, confidence=Confidence.LIKELY,
-                impact="Different numbers look like different businesses (or a central line vs the property).",
+                impact="Different numbers look like different businesses (or a central line vs the branch).",
                 fix="List the same main number everywhere, or both numbers with labels.",
                 verification="Re-run S9.", effort=Effort.S)
         return self.finding("S9.01", St.PASS, "Name, city and phone agree across the site, schema and listings",
@@ -235,8 +235,8 @@ class LocalConsistency(Agent):
             return self.finding("S9.03", St.WARN, "The Maps listing is found but " + "; ".join(issues),
                                 evidence=evidence, confidence=Confidence.LIKELY,
                                 impact="An incomplete listing sends fewer visitors to the site and to the right page.",
-                                fix="Complete the Google Business Profile: category, hours, phone and the property "
-                                    "page as the website.", verification="Re-run C12.", effort=Effort.S)
+                                fix="Complete the Google Business Profile: category, hours, phone and the location's "
+                                    "own page as the website.", verification="Re-run C12.", effort=Effort.S)
         return self.finding("S9.03", St.PASS, "The Maps listing is found, categorised correctly and links to the site",
                             evidence=evidence)
 

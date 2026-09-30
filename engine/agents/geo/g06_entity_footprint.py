@@ -12,11 +12,12 @@ import re
 from urllib.parse import urlsplit
 
 from engine.agents.base import Agent
-from engine.agents.common import business_name, entry_page, load_pages
+from engine.agents.common import archetype, business_name, entry_page, load_pages
 from engine.collectors.c04_facts import BUSINESS_TYPES
 from engine.context import AgentContext, WorkUnit
 from engine.lib.jsonld import page_nodes, types_of
 from engine.lib.urls import site_label
+from engine.rules.packs import pack
 from engine.schemas import (
     AgentResult,
     CheckSpec,
@@ -36,6 +37,13 @@ COMPLAINT = re.compile(r"\b(complain\w*|scam|fraud|cheat\w*|refund not|worst|con
 
 def footprint(ctx: AgentContext) -> dict[str, dict]:
     return {e.payload["part"]: e.payload for e in ctx.snapshot.evidence(EvidenceType.ENTITY_FOOTPRINT)}
+
+
+def entity_types(ctx: AgentContext) -> str:
+    """The structured data types a fix names for the business: Organization, plus its own type if it has one."""
+    the_pack = pack(archetype(ctx))
+    own = the_pack.entity_type if the_pack else "Organization"
+    return "Organization" if own == "Organization" else f"Organization or {own}"
 
 
 def profile_key(url: str) -> str:
@@ -84,7 +92,7 @@ class OffsiteEntityFootprint(Agent):
         rows: list[list] = []
         findings = [self._kg(parts.get("kg"), ctx, rows), self._wiki(parts.get("wiki"), ctx, rows, coverage),
                     self._platforms(parts.get("platforms"), rows),
-                    self._same_as([p for p in (entry, home) if p is not None], parts, rows),
+                    self._same_as(ctx, [p for p in (entry, home) if p is not None], parts, rows),
                     self._brand_results(ctx)]
         return AgentResult(findings=findings, coverage=coverage,
                            signature_table={"columns": self.signature_columns, "rows": rows})
@@ -102,7 +110,7 @@ class OffsiteEntityFootprint(Agent):
                 impact="The knowledge panel is where Google (and AI Overviews) show who a business is; without it, "
                        "facts come from other sites.",
                 fix="Complete and verify the Google Business Profile, keep name, address and website identical "
-                    "everywhere, and add Organization/LodgingBusiness JSON-LD with sameAs links.",
+                    f"everywhere, and add {entity_types(ctx)} JSON-LD with sameAs links.",
                 verification="Recapture the brand search.", effort=Effort.M)
         client = (urlsplit(ctx.client.primary_url).hostname or "").removeprefix("www.")
         wrong = [f"website {kg['website']}" for k in ("website",) if kg.get(k)
@@ -176,7 +184,7 @@ class OffsiteEntityFootprint(Agent):
             fix="Create or claim the missing listings with the same name, address, phone and website.",
             verification="Re-run C12.", effort=Effort.M)
 
-    def _same_as(self, pages, parts, rows):
+    def _same_as(self, ctx, pages, parts, rows):
         declared = same_as(pages)
         if not pages:
             return self.finding("G6.04", St.UNVERIFIABLE, "Entry page and homepage not in the sample")
@@ -204,8 +212,7 @@ class OffsiteEntityFootprint(Agent):
                 else f"{len(missing)} listing(s) found off-site aren't in sameAs", pages=[p.url for p in pages],
                 evidence=evidence or [EvidenceRef(type="html_excerpt", excerpt="no sameAs on business entities")],
                 impact="sameAs tells search engines and AI systems which profiles belong to the business.",
-                fix="Add the official profiles and main listings to sameAs in the Organization or LodgingBusiness "
-                    "JSON-LD.",
+                fix=f"Add the official profiles and main listings to sameAs in the {entity_types(ctx)} JSON-LD.",
                 verification="sameAs lists the official profiles.", effort=Effort.S)
         return self.finding("G6.04", St.PASS, "sameAs lists one profile per site, matching the listings found",
                             evidence=[EvidenceRef(type="html_excerpt", excerpt=", ".join(sorted(declared))[:300])])

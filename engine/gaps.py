@@ -113,6 +113,11 @@ CAUSES = (
      "Google's knowledge panel, so there was nothing to compare them with.",
      "Add the business details to the site's structured data and complete the Google Business Profile, then run "
      "the diagnosis again.", "you"),
+    ("facts", re.compile(r"no key facts", re.I),
+     "The site doesn't state the facts to compare",
+     "These checks compare what AI assistants say with the key facts for this type of business, and none of them "
+     "were found on the pages we read.",
+     "Publish those facts (listed in the reason) as plain text on the site, then run the diagnosis again.", "you"),
     ("ai", re.compile(r"llm|not reviewed|not judged|not mapped|no category answers|not compared|not classified|"
                       r"no search results|only brand searches", re.I),
      "AI review didn't cover these checks", "", "", "rerun"),

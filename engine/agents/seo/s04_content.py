@@ -344,7 +344,7 @@ class OnPageContent(Agent):
                    for p in generic[:2]],
                 impact="The H1 is the page's main heading for readers and search engines; missing or competing "
                        "H1s blur what the page is about.",
-                fix="Give each page exactly one H1 that names its subject (e.g. the property and place).",
+                fix="Give each page exactly one H1 that names its subject (what it is and, where it matters, where).",
                 verification="One descriptive H1 per page.", effort=Effort.S)
         if generic:
             return self.finding(

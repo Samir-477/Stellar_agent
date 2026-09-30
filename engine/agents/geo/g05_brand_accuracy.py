@@ -11,10 +11,11 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from engine.agents.base import Agent
-from engine.agents.common import fact_sheet
+from engine.agents.common import archetype, fact_sheet
 from engine.context import AgentContext, WorkUnit
 from engine.lib.grounding import normalize, quote_in_text
 from engine.llm import LLMError, load_prompt
+from engine.rules.packs import pack
 from engine.schemas import (
     AgentResult,
     CheckSpec,
@@ -56,8 +57,17 @@ class PairChecks(BaseModel):
     pairs: list[PairCheck] = Field(default_factory=list)
 
 
-# Key offerings an accurate answer about the business should state (identity fields excluded).
-KEY_FACTS = ("room_count", "distance_to_landmark", "amenities", "dining", "event_spaces")
+# Key offerings an accurate answer should state come from the business type's pack; these fit any business.
+DEFAULT_KEY_FACTS = ("services", "locations_served")
+
+
+def key_facts(archetype_id: str | None) -> tuple[str, ...]:
+    the_pack = pack(archetype_id)
+    return the_pack.key_offerings if the_pack and the_pack.key_offerings else DEFAULT_KEY_FACTS
+
+
+def _words(keys) -> str:
+    return ", ".join(k.replace("_", " ") for k in keys)
 
 
 class AIBrandAccuracy(Agent):
@@ -98,7 +108,10 @@ class AIBrandAccuracy(Agent):
                                          for c in self.checks], coverage=coverage)
 
         results: list[tuple[str, dict, AnswerCheck]] = []
-        fact_lines = "\n".join(f"{f['id']} {f['key']} = {f['value']}" for f in facts[:40])
+        wanted = key_facts(archetype(ctx))
+        # Key offerings first, so the 40 facts the model sees always include them.
+        ordered = sorted(facts, key=lambda f: f["key"] not in wanted)
+        fact_lines = "\n".join(f"{f['id']} {f['key']} = {f['value']}" for f in ordered[:40])
         for surface, answers in by_surface.items():
             if ctx.llm is None:
                 coverage.skipped.append("Claim checks need the LLM (off in this run).")
@@ -149,7 +162,7 @@ class AIBrandAccuracy(Agent):
                                                             f"({fact_ids[c.fact_id]['key']} = {fact_ids[c.fact_id]['value']})")
                       for s, _, c in wrong[:5]] or [EvidenceRef(type="ai_answer", excerpt=f"{len(results)} answers "
                                                                                         "checked")],
-            impact="Customers asking AI assistants get wrong details about the business and may book elsewhere.",
+            impact="Customers asking AI assistants get wrong details about the business and may choose another.",
             fix="Make the correct facts explicit and consistent on the site, in structured data and on the "
                 "third-party listings AI systems read.",
             verification="Re-run C10 + G5 after the next model/index refresh.", effort=Effort.M))
@@ -160,9 +173,17 @@ class AIBrandAccuracy(Agent):
             evidence=[EvidenceRef(type="ai_answer", excerpt=f"{labels[s]}: {a['text'][:150]}") for s, a in generic[:3]]
             or [EvidenceRef(type="ai_answer", excerpt="specific answers")],
             impact="Generic descriptions give customers no reason to choose this business.",
-            fix="Publish distinctive, quotable facts (rooms, distances, amenities) on key pages and listings.",
+            fix=f"Publish distinctive, quotable facts (such as {_words(wanted[:3])}) on key pages and listings.",
             verification="AI answers repeat specific facts.", effort=Effort.M))
-        known = [k for k in KEY_FACTS if any(f["key"] == k for f in facts)]
+        known = [k for k in wanted if any(f["key"] == k for f in facts)]
+        if not known:
+            findings.append(self.finding(
+                "G5.03", St.UNVERIFIABLE,
+                f"No key facts for this type of business found on the site to compare (such as {_words(wanted[:3])})",
+                evidence=[EvidenceRef(type="html_excerpt", excerpt=f"key facts looked for: {_words(wanted)}")]))
+            findings.append(self._confusion(confused, labels))
+            return AgentResult(findings=findings, coverage=coverage,
+                               signature_table={"columns": self.signature_columns, "rows": rows})
         per_surface = {s: [k for k in known if k not in mentioned_keys.get(s, set())] for s in by_surface}
         lacking = {s: m for s, m in per_surface.items() if len(m) > len(known) / 2}
         findings.append(self.finding(
@@ -175,7 +196,12 @@ class AIBrandAccuracy(Agent):
             impact="What the AI doesn't know, it can't recommend.",
             fix="Repeat these facts in clear, self-contained sentences on the site and on major listings.",
             verification="Re-run C10 + G5.", effort=Effort.M))
-        findings.append(self.finding(
+        findings.append(self._confusion(confused, labels))
+        return AgentResult(findings=findings, coverage=coverage,
+                           signature_table={"columns": self.signature_columns, "rows": rows})
+
+    def _confusion(self, confused, labels):
+        return self.finding(
             "G5.04", St.FAIL if confused else St.PASS,
             f"{len(confused)} AI answer(s) mix the business up with another" if confused
             else "No entity confusion found", confidence=Confidence.LIKELY,
@@ -183,9 +209,7 @@ class AIBrandAccuracy(Agent):
                       for s, _, other in confused[:3]] or [EvidenceRef(type="ai_answer", excerpt="none")],
             impact="Customers get another business's details or reviews.",
             fix="Strengthen entity signals: consistent name, address and sameAs links across site and profiles.",
-            verification="Re-run C10 + G5.", effort=Effort.M))
-        return AgentResult(findings=findings, coverage=coverage,
-                           signature_table={"columns": self.signature_columns, "rows": rows})
+            verification="Re-run C10 + G5.", effort=Effort.M)
 
     @staticmethod
     def _second_opinion(ctx: AgentContext, results, fact_ids: dict, coverage: Coverage) -> int:

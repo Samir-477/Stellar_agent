@@ -366,7 +366,7 @@ class SearchMetadata(Agent):
                               for p, r, _ in weak_titles[:5]],
                     impact="Vague titles rank and get clicked less than titles naming the page's topic and place.",
                     fix="Use the proposed titles, or write ones that lead with the page's topic.",
-                    verification="Titles name the property/service and place.", effort=Effort.S))
+                    verification="Titles name the page's topic, and the place where it matters.", effort=Effort.S))
             else:
                 findings.append(self.finding("S3.03", St.PASS, "Reviewed titles describe their pages",
                                              confidence=Confidence.LIKELY,

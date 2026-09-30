@@ -212,7 +212,7 @@ class StructuredData(Agent):
         for fact in facts:
             if fact["status"] in ("site-stated", "team-confirmed") and fact["source_url"].rstrip("/") == page.url.rstrip("/"):
                 stated.setdefault(fact["key"], []).append(fact)
-        core_type = arch.core_schema_types[0]
+        core_type = arch.entity_type
         name = (stated.get("property_name") or stated.get("business_name") or [{}])[0].get("value")
         entity: dict = {"@context": "https://schema.org", "@type": core_type, "url": page.url}
         used = []
@@ -235,7 +235,7 @@ class StructuredData(Agent):
         missing = [label for key, label in (("address", "address"), ("phone", "phone"), ("geo", "geo coordinates"),
                                             ("image", "image")) if key not in stated]
         if "name" not in entity:
-            return None, missing + ["property_name"]
+            return None, missing + ["business name"]
         after = json.dumps(entity, ensure_ascii=False, indent=2)
         return Patch(key=f"S8.04:jsonld:{page.record.id}", agent_id=self.id, page_url=page.url,
                      type=PatchType.JSONLD_UPSERT, locator=Locator(**block["locator"]) if block.get("locator") else None,
@@ -244,7 +244,7 @@ class StructuredData(Agent):
                                f"doesn't state are left out: {', '.join(missing)}.",
                      fact_ids=used,
                      client_visible_note="Corrects the page's structured data so search engines and AI "
-                                         "assistants read the right hotel details."), missing
+                                         "assistants read the right business details."), missing
 
     # ------------------------------------------------------------ other checks
 

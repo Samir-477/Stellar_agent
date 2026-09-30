@@ -335,7 +335,7 @@ class CitableFacts(Agent):
             evidence=[EvidenceRef(type="html_excerpt", url=j.page.url,
                                   excerpt=(f'generic: "{j.generic[0]}"' if j.generic else "no specific facts")
                                   + (f'; facts: "{j.facts[0]}"' if j.facts else "")) for j in weak[:5]],
-            impact="AI assistants quote specific facts (counts, distances, prices, named amenities); pages of "
+            impact="AI assistants quote specific facts (counts, prices, places, named features); pages of "
                    "general claims give them nothing to cite.",
             fix="Add the concrete facts customers ask about (numbers, names, places, times, prices) in plain text.",
             verification="Re-run G2: at least three specific facts per key page.", effort=Effort.M)
@@ -363,7 +363,7 @@ class CitableFacts(Agent):
                                   else "text could describe any competitor") for j in weak[:5]],
             impact="Search engines and AI assistants favour original, first-hand content over text any competitor "
                    "could publish.",
-            fix="Add what only you can say: local tips, real guest examples, your own numbers, named staff or "
+            fix="Add what only you can say: your own numbers, real customer examples, local knowledge, named staff or "
                 "partners.", verification="Re-run G2: first-hand detail on each key page.", effort=Effort.M)
 
     def _sources(self, judgements: list[Judgement], focus: set[str]):
@@ -447,8 +447,8 @@ class CitableFacts(Agent):
         if not pairs:
             return self.finding("G2.06", St.PASS, f"No differing brand figures across {scanned} sampled pages",
                                 confidence=Confidence.LIKELY,
-                                evidence=[EvidenceRef(type="html_excerpt", excerpt="resorts, destinations, branches, "
-                                                                                   "customers and founding year "
+                                evidence=[EvidenceRef(type="html_excerpt", excerpt="brand figures (locations, branches, "
+                                                                                   "customers, founding year) "
                                                                                    "compared across pages")])
         if all(p.verdict is None for p in pairs):
             return self.finding("G2.06", St.UNVERIFIABLE, f"{len(pairs)} differing figure(s) not reviewed")

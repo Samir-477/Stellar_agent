@@ -51,6 +51,10 @@ class ArchetypePack:
     question_seeds: tuple[str, ...]  # {brand} {city} {service} placeholders
     prompt_seeds: tuple[str, ...]
     ymyl: str = "standard"
+    # What an accurate description of this kind of business states (G5.03), and the schema.org type for the
+    # business itself (not its products or pages), named alongside Organization in fixes.
+    key_offerings: tuple[str, ...] = ()
+    entity_type: str = "Organization"
 
 
 COMMON_FACT_KEYS = ("business_name", "brand", "legal_name", "address", "city", "phone", "email",
@@ -92,6 +96,8 @@ PACKS: dict[str, ArchetypePack] = {
                         "{brand} check in time", "{brand} cancellation policy", "hotels near {landmark}"),
         prompt_seeds=("What are the best hotels near {landmark} in {city}?", "Tell me about {brand}.",
                       "Which {city} hotels have a swimming pool with a view of {landmark}?"),
+        key_offerings=("room_count", "distance_to_landmark", "amenities", "dining", "event_spaces"),
+        entity_type="Hotel",
     ),
     "loans": ArchetypePack(
         id="loans",
@@ -131,6 +137,9 @@ PACKS: dict[str, ArchetypePack] = {
         prompt_seeds=("What is the best {service} option in {city}?", "Is {brand} a safe lender?",
                       "Tell me about {brand}."),
         ymyl="high",
+        key_offerings=("loan_types", "interest_rate_range", "processing_fee", "loan_amount_range", "tenure_range",
+                       "eligibility"),
+        entity_type="FinancialService",
     ),
     "retail": ArchetypePack(
         id="retail",
@@ -167,6 +176,8 @@ PACKS: dict[str, ArchetypePack] = {
         question_seeds=("{brand} return policy", "is {brand} genuine", "{service} price in india"),
         prompt_seeds=("What are the best {service} brands in India?", "Tell me about {brand}."),
         ymyl="medium",
+        key_offerings=("product_categories", "return_policy", "shipping_policy", "delivery_time", "payment_methods"),
+        entity_type="OnlineStore",
     ),
     "logistics": ArchetypePack(
         id="logistics",
@@ -198,6 +209,7 @@ PACKS: dict[str, ArchetypePack] = {
         platforms=("indiamart.com", "justdial.com", "tradeindia.com", "linkedin.com"),
         question_seeds=("courier from {city} charges", "{brand} tracking", "{brand} pickup service areas"),
         prompt_seeds=("What is the best logistics company in {city}?", "Tell me about {brand}."),
+        key_offerings=("service_types", "coverage_area", "transit_times", "certifications"),
     ),
 }
 
