@@ -8,6 +8,8 @@ reported per surface with its label, never blended into readiness.
 
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, Field
 
 from engine.agents.base import Agent
@@ -64,6 +66,17 @@ DEFAULT_KEY_FACTS = ("services", "locations_served")
 def key_facts(archetype_id: str | None) -> tuple[str, ...]:
     the_pack = pack(archetype_id)
     return the_pack.key_offerings if the_pack and the_pack.key_offerings else DEFAULT_KEY_FACTS
+
+
+# Words that make a claim exclusive or negative, so it can contradict a list ("only gold loans", "no home loans").
+_EXCLUSIVE = re.compile(r"\b(not|no|never|only|solely|exclusively|doesn't|does not|don't|isn't|stopped|"
+                        r"discontinued|without)\b", re.I)
+
+
+def adds_to_a_list(quote: str, value: str) -> bool:
+    """A claim naming more items than a listed fact (products, amenities) doesn't contradict it: the list comes
+    from the pages we read and may be partial. Only an exclusive or negative claim can."""
+    return ";" in value and not _EXCLUSIVE.search(quote)
 
 
 def _words(keys) -> str:
@@ -131,6 +144,9 @@ class AIBrandAccuracy(Agent):
                 # Keep only claims quoted from the answer; "wrong" must cite a real fact.
                 check.claims = [c for c in check.claims if quote_in_text(c.quote, answer["text"])
                                 and (c.verdict != "wrong" or c.fact_id in fact_ids)]
+                for claim in check.claims:
+                    if claim.verdict == "wrong" and adds_to_a_list(claim.quote, fact_ids[claim.fact_id]["value"]):
+                        claim.verdict = "unverifiable"
                 results.append((surface, answer, check))
         overturned = self._second_opinion(ctx, results, fact_ids, coverage)
         coverage.examined = {"answers": len(results), "surfaces": len(by_surface),

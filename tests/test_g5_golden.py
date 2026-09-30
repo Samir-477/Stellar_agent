@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from engine.agents.geo.g05_brand_accuracy import AIBrandAccuracy, AnswerCheck, AnswerChecks
+from engine.agents.geo.g05_brand_accuracy import AIBrandAccuracy, AnswerCheck, AnswerChecks, adds_to_a_list
 from engine.context import AgentContext, ClientProfile
 from engine.core.blobstore import LocalBlobStore
 from engine.reports import check_statuses
@@ -46,6 +46,14 @@ def test_a_lender_is_checked_against_loan_facts_not_hotel_facts(tmp_path):
     excerpt = found["G5.03"].evidence[0].excerpt
     assert "0 of 2 key facts" in excerpt and "loan_types" in excerpt and "room_count" not in excerpt
     assert "loan types" in found["G5.02"].fix and "rooms" not in found["G5.02"].fix
+
+
+def test_naming_more_products_than_the_site_lists_is_not_a_wrong_fact():
+    offered = "Gold Loan; Home Loan; Business Loans"
+    assert adds_to_a_list("offers gold loans, microfinance, and vehicle finance", offered)  # the list may be partial
+    assert not adds_to_a_list("it only offers gold loans", offered)  # exclusive: can contradict
+    assert not adds_to_a_list("it does not offer home loans", offered)
+    assert not adds_to_a_list("a 40-room hotel", "24")  # a single value is compared as before
 
 
 def test_no_key_facts_on_the_site_is_could_not_check_not_a_pass(tmp_path):

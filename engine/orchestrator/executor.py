@@ -146,15 +146,34 @@ def _reduce(task: dict, agent, ctx: AgentContext, run_ctx: dict) -> str:
         return _done(task, "failed", error="agent plan failed or its evidence is missing")
     units = [d for d in repo.dep_tasks(task) if d["kind"] == "agent.unit" and d["status"] == "succeeded"]
     results = [AgentResult.model_validate(d["output"]) for d in units]
-    merged = agent.reduce(ctx, results)
-    page_urls = {p.final_url or p.url for p in ctx.snapshot.pages()} | {p.url for p in ctx.snapshot.pages()}
-    merged, errors = validate_result(agent, merged, page_urls)
-    report = build_agent_report(agent, merged)
-    repo.save_agent_result(str(run_ctx["run_id"]), agent.id, merged.findings, merged.patches, report)
+    errors, count = _save_agent(agent, ctx, agent.reduce(ctx, results), str(run_ctx["run_id"]))
     if errors:
         status = "partial"
-    return _done(task, status, output={"validation_errors": errors, "findings": len(merged.findings)},
+    return _done(task, status, output={"validation_errors": errors, "findings": count},
                  error="; ".join(errors)[:2000] or None)
+
+
+def _save_agent(agent, ctx: AgentContext, merged: AgentResult, run_id: str) -> tuple[list[str], int]:
+    """Validate an agent's merged result, then replace its findings, patches and report for the run."""
+    page_urls = {p.final_url or p.url for p in ctx.snapshot.pages()} | {p.url for p in ctx.snapshot.pages()}
+    merged, errors = validate_result(agent, merged, page_urls)
+    repo.save_agent_result(run_id, agent.id, merged.findings, merged.patches, build_agent_report(agent, merged))
+    return errors, len(merged.findings)
+
+
+def rerun_agent(env: Env, run_id: str, agent_id: str, llm) -> dict:
+    """Run one agent again on a finished run's stored evidence (no crawl, no search calls), replace its
+    results, record the outcome on its step and settle the run's status again."""
+    run_ctx = repo.run_context(run_id)
+    agent = AGENTS[agent_id]
+    ctx = AgentContext(SnapshotReader(env.store, env.blobs, str(run_ctx["snapshot_id"])), _client(run_ctx),
+                       env.settings, llm)
+    merged = agent.reduce(ctx, [agent.run_unit(ctx, unit) for unit in agent.plan(ctx)])
+    errors, count = _save_agent(agent, ctx, merged, run_id)
+    status = "partial" if errors else "succeeded"
+    output = {"validation_errors": errors, "findings": count}
+    repo.set_agent_outcome(run_id, agent.id, status, output, "; ".join(errors)[:2000] or None)
+    return {"status": status, **output, "run_status": settle_run_status(run_id)}
 
 
 def build_run_intelligence(env: Env, run_ctx: dict, llm, failed_steps: list[str]) -> dict:
@@ -184,16 +203,25 @@ def _intelligence(task: dict, env: Env, run_ctx: dict, snapshot_id: str, client,
                                             "summary_source": report["executive_summary"].get("source")})
 
 
-def _finalize(task: dict) -> str:
-    rows = repo.run_task_statuses(str(task["run_id"]))
+def run_status_of(rows: list[dict]) -> tuple[str, list[str]]:
+    """A run's status from its steps, and the steps that failed or were skipped."""
     reduces = [r for r in rows if r["kind"] == "agent.reduce"]  # run.intelligence counts like any other step
     if reduces and all(r["status"] == "failed" for r in reduces):
-        run_status = "failed"
+        status = "failed"
     elif any(r["status"] in ("failed", "skipped", "partial") for r in rows if r["kind"] != "run.finalize"):
-        run_status = "completed_partial"
+        status = "completed_partial"
     else:
-        run_status = "completed"
+        status = "completed"
     problems = sorted({f"{r['kind']} {r['ref']}: {r['status']}" for r in rows
                        if r["status"] in ("failed", "skipped") and r["kind"] != "run.finalize"})
-    repo.set_run_status(str(task["run_id"]), run_status, note="; ".join(problems)[:2000] or None)
-    return _done(task, "succeeded", output={"run_status": run_status})
+    return status, problems
+
+
+def settle_run_status(run_id: str) -> str:
+    status, problems = run_status_of(repo.run_task_statuses(run_id))
+    repo.set_run_status(run_id, status, note="; ".join(problems)[:2000] or None)
+    return status
+
+
+def _finalize(task: dict) -> str:
+    return _done(task, "succeeded", output={"run_status": settle_run_status(str(task["run_id"]))})

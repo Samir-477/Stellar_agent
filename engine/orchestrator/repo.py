@@ -260,6 +260,14 @@ def finish(task: dict, status: str, *, output: Any = None, error: str | None = N
     return True
 
 
+def set_agent_outcome(run_id: str, agent_id: str, status: str, output: dict, error: str | None) -> None:
+    """Record a re-run agent's outcome on its reduce step, as if the step had just finished."""
+    with connection() as conn:
+        conn.execute("update tasks set status=%s, output=%s, error=%s, finished_at=now() "
+                     "where run_id=%s and kind='agent.reduce' and ref=%s",
+                     (status, json(output), error, run_id, agent_id))
+
+
 def retry_or_fail(task: dict, error: str, max_attempts: int) -> str:
     with connection() as conn:
         row = conn.execute(
