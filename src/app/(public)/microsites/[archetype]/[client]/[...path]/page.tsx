@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { MicrositeIssues } from "@/components/microsite/microsite-issues";
 import { PreviewFrame } from "@/components/workspace/preview-frame";
+import { SplitPane } from "@/components/workspace/split-pane";
 import { engine } from "@/lib/engine";
 import { formatDate, urlPath } from "@/lib/format";
 import { site } from "@/lib/site";
@@ -73,13 +74,14 @@ export default async function MicrositePage({ params }: { params: Promise<Params
         </div>
       </section>
 
-      <main className="mx-auto grid max-w-[1320px] gap-10 px-5 py-10 sm:px-8 lg:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="min-w-0">
-          <PreviewFrame views={views} pageUrl={microsite.source_url} height="h-[80vh] min-h-[600px]" />
-        </div>
-        <aside className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-48px)] lg:self-start lg:overflow-y-auto">
-          <MicrositeIssues issues={microsite.issues} />
-        </aside>
+      <main className="mx-auto max-w-[1320px] px-5 py-10 sm:px-8">
+        <SplitPane storageKey="stellar.microsite-split" initial={64} label="Resize the preview"
+          left={<PreviewFrame views={views} pageUrl={microsite.source_url} height="h-[80vh] min-h-[600px]" />}
+          right={
+            <aside aria-label="Issues on this page" className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-48px)] lg:overflow-y-auto">
+              <MicrositeIssues issues={microsite.issues} />
+            </aside>
+          } />
       </main>
 
       <footer className="border-t border-rule">
