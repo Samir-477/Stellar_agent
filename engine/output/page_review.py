@@ -12,6 +12,7 @@ from engine.lib.urls import norm
 from engine.orchestrator import repo
 from engine.output.diffs import page_snippets
 from engine.output.patcher import PlacementResult, apply
+from engine.plain import entry
 from engine.store import Store
 
 MAX_ISSUES = 40
@@ -54,7 +55,9 @@ def review_entry_page(run_id: str, store: Store, blobs: BlobStore) -> PageReview
     page_urls = {norm(page.url), norm(page.final_url or page.url)}
     patches = [p for p in repo.list_patches(run_id) if p.get("page_url") and norm(p["page_url"]) in page_urls]
     findings = repo.list_findings(run_id)
-    titles = {key: f["title"] for f in findings for key in f.get("patch_keys", [])}
+    # Each change is named by the issue it fixes, in plain words where the check has them.
+    titles = {key: (entry(f["check_id"]).problem if entry(f["check_id"]) else f["title"])
+              for f in findings for key in f.get("patch_keys", [])}
     for patch in patches:
         patch["title"] = titles.get(patch["key"], "Suggested change")
     result = apply(raw, page.final_url or page.url, patches)

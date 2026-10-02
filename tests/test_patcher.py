@@ -64,3 +64,29 @@ def test_link_insert_wraps_the_exact_phrase_and_refuses_when_missing():
     assert result.placed == ["l1"] and result.not_placed == [{"key": "l2",
                                                               "reason": "anchor phrase not found in the element"}]
     assert '<p><a href="https://h.example/dining">Dining paragraph</a>.</p>' in result.fixed_html
+
+
+OLD_OVERLAY_PAGE = """<!DOCTYPE html><html><head></head><body><p data-fix-id="fix-0" class="dx-changed">Rooms</p>
+<style>[data-fix-id]{outline:3px solid #e8590c}</style><div id="dx-card"></div>
+<script id="dx-data" type="application/json">{"fix-0": {"title": "2 of 8 sections lack answers", "after": "x"}}</script>
+<script>(function(){var data=JSON.parse(document.getElementById('dx-data').textContent);})();</script></body></html>"""
+
+
+def test_annotated_page_carries_the_hover_tooltip_and_change_stepper():
+    patches = [{"key": "a", "type": "element_insert", "locator": loc("/html/body/div/p[2]"), "title": "Plain name",
+                "after": "<h3>Q rooms?</h3><p>A rooms.</p>"}]
+    html = apply(PAGE, "https://h.example/agra", patches).annotated_html
+    for part in ('id="dx-tip"', 'id="dx-nav"', 'id="dx-card"', 'data-version="2"', "Click for before and after"):
+        assert part in html
+    doc = H.fromstring(html)
+    assert '"Plain name"' in doc.get_element_by_id("dx-data").text
+
+
+def test_pages_built_with_the_old_overlay_are_upgraded_once_with_plain_titles():
+    from engine.output.patcher import upgrade_annotated
+    html = upgrade_annotated(OLD_OVERLAY_PAGE, {"2 of 8 sections lack answers": "Sections don't start with an answer"})
+    assert html.count('id="dx-data"') == 1 and html.count('id="dx-script"') == 1 and html.count("<style") == 1
+    assert "#e8590c}" not in html and "Sections don't start with an answer" in html
+    assert 'data-fix-id="fix-0"' in html  # the page's own marks are kept
+    assert upgrade_annotated(html) == upgrade_annotated(upgrade_annotated(html))  # idempotent
+    assert upgrade_annotated("<html><body><p>No overlay</p></body></html>") == "<html><body><p>No overlay</p></body></html>"

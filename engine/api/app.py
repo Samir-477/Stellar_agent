@@ -24,6 +24,7 @@ from engine.orchestrator.executor import execute_task
 from engine.output import preview
 from engine.output.bundle import build_preview as build_preview_bundle
 from engine.output.microsite import build_microsite, complete_issues
+from engine.output.patcher import upgrade_annotated
 from engine.output.page_review import ReviewError
 from engine.output.snippet_cache import run_snippets
 from engine.registry import AGENTS, COLLECTORS, agent_collectors, collectors_for
@@ -291,6 +292,12 @@ def unpublish(microsite_id: str) -> dict:
     return {"id": microsite_id, "unpublished": True}
 
 
+def _plain_titles(issues: list[dict]) -> dict[str, str]:
+    """Each issue's technical title to its plain name, for change cards stored before they used plain names."""
+    return {i["title"]: plain.entry(i["check_id"]).problem for i in issues
+            if i.get("title") and plain.entry(i.get("check_id", ""))}
+
+
 def _live(slug: str) -> dict:
     parts = slug.strip("/").split("/")
     if len(parts) < 3:
@@ -311,7 +318,10 @@ def live_microsite(slug: str) -> dict:
 def live_microsite_html(slug: str, view: str = "fixed") -> Response:
     if view not in ("fixed", "annotated"):
         raise HTTPException(404, "unknown view")
-    body = make_blob_store(get_settings()).get(_live(slug)[f"{view}_key"])
+    row = _live(slug)
+    body = make_blob_store(get_settings()).get(row[f"{view}_key"])
+    if view == "annotated":
+        body = upgrade_annotated(body, _plain_titles(row.get("issues") or []))
     headers = {"X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer", "Cache-Control": "public, max-age=60",
                "Content-Security-Policy": "sandbox allow-scripts allow-popups"}
     return Response(body, media_type="text/html; charset=utf-8", headers=headers)
@@ -364,7 +374,10 @@ def preview_page(run_id: str, index: int, variant: str, exp: int = 0, sig: str =
                "Cache-Control": "private, max-age=300",
                "Content-Security-Policy": "sandbox allow-scripts allow-popups; "
                                           f"frame-ancestors {' '.join(settings.dashboard_origins.split())}"}
-    return Response(blobs.get(page[f"{variant}_key"]), media_type="text/html; charset=utf-8", headers=headers)
+    body = blobs.get(page[f"{variant}_key"])
+    if variant == "annotated":
+        body = upgrade_annotated(body, _plain_titles(manifest.get("issues") or []))
+    return Response(body, media_type="text/html; charset=utf-8", headers=headers)
 
 
 @app.get("/api/v1/runs/{run_id}/agents/{agent_id}", dependencies=[api])
