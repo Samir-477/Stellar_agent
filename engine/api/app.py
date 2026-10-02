@@ -358,6 +358,33 @@ def build_preview(run_id: str) -> dict:
     return preview.for_workspace(settings, _remember("manifest", run_id, manifest))
 
 
+class ApprovalIn(BaseModel):
+    keys: list[str] = Field(min_length=1, max_length=200)
+    approved_by: str | None = Field(default=None, max_length=200)
+
+
+@app.post("/api/v1/runs/{run_id}/approvals", dependencies=[api])
+def approve_changes(run_id: str, body: ApprovalIn) -> dict:
+    """Approve prepared changes (Patch.approval == "required"), then rebuild the preview so they are applied.
+    Publishing the microsite again shows them to the client."""
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, "run not found")
+    if run["status"] not in ("completed", "completed_partial"):
+        raise HTTPException(409, "the run has not finished")
+    waiting = {p["key"] for p in repo.list_patches(run_id) if p.get("approval", "auto") == "required"}
+    unknown = sorted(set(body.keys) - waiting)
+    if unknown:
+        raise HTTPException(422, f"These changes don't exist or don't need approval: {', '.join(unknown[:5])}")
+    repo.approve(run_id, sorted(set(body.keys)), body.approved_by)
+    settings = get_settings()
+    try:
+        manifest = build_preview_bundle(run_id, PostgresStore(), make_blob_store(settings))
+    except ReviewError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return preview.for_workspace(settings, _remember("manifest", run_id, manifest))
+
+
 @app.get("/api/v1/preview/{run_id}/{index}/{variant}", include_in_schema=False)
 def preview_page(run_id: str, index: int, variant: str, exp: int = 0, sig: str = "") -> Response:
     """One captured page for the workspace preview, behind a signed, expiring link. Sandboxed:

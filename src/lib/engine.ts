@@ -113,6 +113,8 @@ export const engine = {
   },
   preview: (runId: string) => optional(call<Preview>(runPath(runId, "/preview"))),
   buildPreview: (runId: string) => call<Preview>(runPath(runId, "/preview"), { method: "POST" }),
+  approveChanges: (runId: string, body: { keys: string[]; approved_by?: string }) =>
+    call<Preview>(runPath(runId, "/approvals"), { method: "POST", body: JSON.stringify(body) }),
   clients: () => call<Client[]>("/clients"),
   createClient: (body: { name: string; primary_url: string; archetype: string | null; crawl_consent_by: string }) =>
     call<Client>("/clients", { method: "POST", body: JSON.stringify(body) }),

@@ -28,7 +28,8 @@ def build_preview(run_id: str, store: Store, blobs: BlobStore) -> dict:
         "fixed_key": blobs.put(f"{folder}/fixed.html", result.fixed_html.encode("utf-8")),
         "annotated_key": blobs.put(f"{folder}/annotated.html", result.annotated_html.encode("utf-8")),
         "changes": [{"key": p["key"], "title": p["title"], "note": p.get("client_visible_note", ""),
-                     "type": p["type"], "placed": p["key"] in result.placed} for p in review.patches],
+                     "type": p["type"], "placed": p["key"] in result.placed,
+                     "awaiting_approval": p["key"] in review.waiting} for p in review.patches],
         "not_placed": result.not_placed, "under_the_hood": result.under_the_hood,
     }
     manifest = {

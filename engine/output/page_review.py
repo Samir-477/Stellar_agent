@@ -28,6 +28,7 @@ class PageReview:
     url: str  # the page as captured (after redirects)
     raw: str
     patches: list[dict]  # the changes proposed for this page, each with the title of the issue it fixes
+    waiting: set[str]  # keys of changes prepared but not yet approved (not applied)
     result: PlacementResult
     issues: list[dict]  # fixed first; observations left out; at most MAX_ISSUES
 
@@ -60,7 +61,10 @@ def review_entry_page(run_id: str, store: Store, blobs: BlobStore) -> PageReview
               for f in findings for key in f.get("patch_keys", [])}
     for patch in patches:
         patch["title"] = titles.get(patch["key"], "Suggested change")
-    result = apply(raw, page.final_url or page.url, patches)
+    # A change that waits for approval is shown (with its code) but only applied once the team approves it.
+    approved = repo.approved_keys(run_id)
+    waiting = {p["key"] for p in patches if p.get("approval", "auto") == "required" and p["key"] not in approved}
+    result = apply(raw, page.final_url or page.url, [p for p in patches if p["key"] not in waiting])
 
     cases = (repo.get_intelligence_report(run_id) or {}).get("plain_cases") or {}
     issues = []
@@ -72,8 +76,9 @@ def review_entry_page(run_id: str, store: Store, blobs: BlobStore) -> PageReview
         issues.append({k: card[k] for k in ("agent_id", "agent_name", "check_id", "status", "severity", "title",
                                             "impact", "fix", "verification", "effort", "fix_type", "plain")}
                       | {"fixed": any(c["key"] in result.placed for c in changes),
+                         "awaiting_approval": [c["key"] for c in changes if c["key"] in waiting],
                          "changes": [{k: c[k] for k in ("type", "language", "before", "after", "before_segments",
                                                         "after_segments", "note")} for c in changes]})
     issues.sort(key=lambda i: not i["fixed"])
-    return PageReview(ctx=ctx, url=page.final_url or page.url, raw=raw, patches=patches, result=result,
-                      issues=issues[:MAX_ISSUES])
+    return PageReview(ctx=ctx, url=page.final_url or page.url, raw=raw, patches=patches, waiting=waiting,
+                      result=result, issues=issues[:MAX_ISSUES])

@@ -377,6 +377,20 @@ def save_agent_result(run_id: str, agent_id: str, findings: list[Finding], patch
                      (run_id, agent_id, json(report.model_dump(mode="json"))))
 
 
+def approved_keys(run_id: str) -> set[str]:
+    with connection() as conn:
+        return {r["patch_key"] for r in conn.execute("select patch_key from approvals where run_id=%s",
+                                                     (run_id,)).fetchall()}
+
+
+def approve(run_id: str, keys: list[str], approved_by: str | None) -> int:
+    """Record approval of these proposed changes; approving one twice keeps the first record."""
+    with connection() as conn, conn.cursor() as cur:
+        cur.executemany("insert into approvals (run_id, patch_key, approved_by) values (%s,%s,%s) "
+                        "on conflict (run_id, patch_key) do nothing", [(run_id, k, approved_by) for k in keys])
+    return len(keys)
+
+
 def save_intelligence_report(run_id: str, body: dict) -> None:
     with connection() as conn:
         conn.execute("delete from reports where run_id=%s and kind='intelligence'", (run_id,))

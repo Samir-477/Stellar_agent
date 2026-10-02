@@ -320,6 +320,7 @@ export type MicrositeIssue = {
   verification?: string; // absent in previews built before 2026-09-30
   effort?: "S" | "M" | "L" | null;
   fixed: boolean;
+  awaiting_approval?: string[]; // keys of prepared changes waiting for the team's approval (workspace only)
   changes: Pick<CodeChange, "type" | "language" | "before" | "after" | "before_segments" | "after_segments" | "note">[];
   plain?: PlainExplanation; // absent in microsites published before 2026-09-29
 };

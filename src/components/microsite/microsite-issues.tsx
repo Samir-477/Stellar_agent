@@ -1,13 +1,16 @@
 "use client";
 
-import { Check, ChevronDown, ChevronRight, CircleDashed } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, CircleDashed, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { CodeDiff } from "@/components/workspace/code-diff";
 import { FixPlan, PlainExplanation, TermsUsed } from "@/components/workspace/plain-explanation";
 import type { MicrositeIssue } from "@/lib/types";
 
-function IssueItem({ issue, open, onToggle, wide }: { issue: MicrositeIssue; open: boolean; onToggle: () => void; wide: boolean }) {
+function IssueItem({ issue, open, onToggle, wide, showReady = false }: {
+  issue: MicrositeIssue; open: boolean; onToggle: () => void; wide: boolean; showReady?: boolean;
+}) {
   const plain = issue.plain;
+  const ready = showReady && !issue.fixed && (issue.awaiting_approval?.length ?? 0) > 0;
   return (
     <li className="border-b border-rule last:border-b-0">
       <button type="button" onClick={onToggle} aria-expanded={open}
@@ -17,12 +20,25 @@ function IssueItem({ issue, open, onToggle, wide }: { issue: MicrositeIssue; ope
           : <CircleDashed aria-hidden="true" size={20} className="mt-0.5 text-amber" />}
         <span>
           <span className="block text-sm leading-snug font-semibold">{plain?.problem ?? issue.title}</span>
-          <span className="mt-1 block text-2xs text-ink-3">Found by {issue.agent_name}</span>
+          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-ink-3">
+            Found by {issue.agent_name}
+            {ready && (
+              <span className="inline-flex items-center gap-1 rounded-[3px] border border-signal/40 bg-soft px-1.5 py-px font-semibold text-signal">
+                <Sparkles aria-hidden="true" size={10} /> Ready to apply
+              </span>
+            )}
+          </span>
         </span>
         <ChevronDown aria-hidden="true" size={16} className={`mt-1 text-ink-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="space-y-4 px-5 pb-6 pl-[54px] text-sm leading-relaxed">
+          {ready && (
+            <p className="rounded-[6px] border border-signal/30 bg-soft px-4 py-3 text-sm text-ink">
+              <span className="font-semibold">We&apos;ve prepared this change.</span> Approve it to apply it to the page;
+              the code is under Technical details.
+            </p>
+          )}
           {plain && issue.fixed ? (
             <PlainExplanation plain={{ ...plain, action: `Done in this preview: ${lowerFirst(plain.action)}` }} compact />
           ) : plain ? (
@@ -70,10 +86,16 @@ function lowerFirst(text: string): string {
 }
 
 /** The issues on this page: the ones fixed in this preview first, then the ones still to do. `wide` gives the
- *  code diffs full size, for a column wide enough to show before and after side by side. */
-export function MicrositeIssues({ issues, wide = false }: { issues: MicrositeIssue[]; wide?: boolean }) {
+ *  code diffs full size, for a column wide enough to show before and after side by side. In the workspace,
+ *  `showReady` marks still-to-do items with a prepared change (listed first), and `todoTop`/`todoBottom`
+ *  hold the approval and hand-off controls; the public microsite shows none of these. */
+export function MicrositeIssues({ issues, wide = false, showReady = false, todoTop, todoBottom }: {
+  issues: MicrositeIssue[]; wide?: boolean; showReady?: boolean; todoTop?: React.ReactNode; todoBottom?: React.ReactNode;
+}) {
   const fixed = issues.filter((i) => i.fixed);
-  const pending = issues.filter((i) => !i.fixed);
+  const isReady = (i: MicrositeIssue) => showReady && (i.awaiting_approval?.length ?? 0) > 0;
+  const pending = issues.filter((i) => !i.fixed).sort((a, b) => Number(isReady(b)) - Number(isReady(a)));
+  const readyCount = pending.filter(isReady).length;
   const [open, setOpen] = useState<number | null>(fixed.length ? 0 : null);
   const toggle = (index: number) => setOpen((current) => (current === index ? null : index));
   return (
@@ -93,12 +115,19 @@ export function MicrositeIssues({ issues, wide = false }: { issues: MicrositeIss
           <h2 id="pending-heading" className="flex items-baseline justify-between gap-3 font-display text-xl font-semibold tracking-tight">
             Still to do <span className="font-mono text-xs font-normal text-ink-3">{pending.length}</span>
           </h2>
-          <p className="mt-1 text-xs text-ink-3">These need work outside the page, or facts from you.</p>
+          <p className="mt-1 text-xs text-ink-3">
+            {readyCount
+              ? `${readyCount} can be applied by us once approved; the rest need work outside the page, or facts from you.`
+              : "These need work outside the page, or facts from you."}
+          </p>
+          {todoTop && <div className="mt-3">{todoTop}</div>}
           <ul className="mt-3 border border-rule bg-paper">
             {pending.map((issue, i) => (
-              <IssueItem key={`${issue.check_id}-p${i}`} issue={issue} open={open === fixed.length + i} onToggle={() => toggle(fixed.length + i)} wide={wide} />
+              <IssueItem key={`${issue.check_id}-p${i}`} issue={issue} open={open === fixed.length + i} onToggle={() => toggle(fixed.length + i)}
+                         wide={wide} showReady={showReady} />
             ))}
           </ul>
+          {todoBottom && <div className="mt-4">{todoBottom}</div>}
         </section>
       )}
     </div>

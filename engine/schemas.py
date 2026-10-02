@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -158,6 +158,9 @@ class Patch(BaseModel):
     fact_ids: list[str] = Field(default_factory=list)
     confidence: Confidence = Confidence.CONFIRMED
     client_visible_note: str = ""
+    # "auto": applied in the preview straight away. "required": prepared, and applied only after the team
+    # approves it (user decision, 2026-10-02): changes that close a "Still to do" item.
+    approval: Literal["auto", "required"] = "auto"
 
 
 class Coverage(BaseModel):

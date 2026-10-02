@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, ExternalLink, Globe, RefreshCw, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MicrositeIssues } from "@/components/microsite/microsite-issues";
+import { ApprovalBar, HandoffPanel } from "@/components/workspace/approval";
 import { PreviewFrame } from "@/components/workspace/preview-frame";
 import { SplitPane } from "@/components/workspace/split-pane";
 import { formatDate, urlPath } from "@/lib/format";
@@ -156,6 +157,15 @@ export function OutputLayer({ runId, initial, entryUrl, archetype, clientName, l
     }
   }
 
+  async function approve(keys: string[]) {
+    const response = await fetch(`/api/workspace/runs/${runId}/approvals`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keys }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "The changes couldn't be approved.");
+    setPreview(data);
+  }
+
   const page = preview?.pages.find((p) => sameUrl(p.url, entryUrl));
   // The preview carries the page's placement results and issue list, so this layer needs no other request.
   const changes = page?.changes ?? [];
@@ -199,7 +209,9 @@ export function OutputLayer({ runId, initial, entryUrl, archetype, clientName, l
               right={
                 <aside aria-label="Technical details" className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-120px)] lg:self-start lg:overflow-y-auto">
                   {preview?.issues
-                    ? <MicrositeIssues issues={preview.issues} wide />
+                    ? <MicrositeIssues issues={preview.issues} wide showReady
+                                       todoTop={<ApprovalBar issues={preview.issues} onApprove={approve} />}
+                                       todoBottom={<HandoffPanel issues={preview.issues} client={clientName} pageUrl={entryUrl} />} />
                     : <p className="border border-rule bg-mist px-5 py-6 text-sm text-ink-2">This preview was built before the technical details were saved with it. Choose Rebuild preview to add them.</p>}
                 </aside>
               } />

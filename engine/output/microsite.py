@@ -66,7 +66,7 @@ def build_microsite(run_id: str, store: Store, blobs: BlobStore, *, client_slug:
         "page_title": title,
         "fixed_key": blobs.put(f"{prefix}/fixed.html", result.fixed_html.encode("utf-8")),
         "annotated_key": blobs.put(f"{prefix}/annotated.html", result.annotated_html.encode("utf-8")),
-        "issues": cards, "changes_placed": len(result.placed), "changes_total": len(patches),
+        "issues": cards, "changes_placed": len(result.placed), "changes_total": len(patches) - len(review.waiting),
         "published_by": published_by,
     }
     return repo.insert_microsite(record)
