@@ -121,6 +121,9 @@ def snippet(page_html: str | None, patch: dict) -> dict:
             if kind == "jsonld_upsert":
                 before = _pretty_json(element.text)
                 after = _pretty_json(_fragment(after)[0].text)
+            elif kind == "element_replace":
+                before = _short(element)
+                after = "\n".join(_outer(n) for n in _fragment(after) if not isinstance(n, str))
             elif kind == "element_insert":
                 context = _short(element)
                 before = context

@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from urllib.parse import urljoin
 
 from engine.agents.base import Agent
-from engine.agents.common import entry_page, load_pages, norm
+from engine.agents.common import PageView, entry_page, load_pages, norm
 from engine.context import AgentContext, WorkUnit
 from engine.schemas import (
     AgentResult,
@@ -23,6 +24,9 @@ from engine.schemas import (
     Effort,
     EvidenceRef,
     EvidenceType,
+    Locator,
+    Patch,
+    PatchType,
     Pillar,
     Severity as Sev,
 )
@@ -91,14 +95,60 @@ class PageExperience(Agent):
         findings = [self._vital(cid, measures[cid], entry_url) for cid in VITALS]
         findings += [self._lcp_parts(measured), self._images(measured), self._mobile(measured, pages),
                      self._scripts(measured)]
+        patches = self._image_hints(measured, pages, findings)
         rows = []
         for r in measured:
             cells = {cid: next((m for m in measures[cid] if m.url == r["url"]), None) for cid in VITALS}
             rows.append([r["url"]] + [m.text(VITALS[cid][0], VITALS[cid][6]).rsplit(" (", 1)[0] if m else "—"
                                       for cid, m in cells.items()]
                         + [", ".join(sorted({m.source for m in cells.values() if m}))])
-        return AgentResult(findings=findings, coverage=coverage,
+        return AgentResult(findings=findings, patches=patches, coverage=coverage,
                            signature_table={"columns": self.signature_columns, "rows": rows})
+
+    # ------------------------------------------------------------ prepared image hints
+
+    def _image_hints(self, measured: list[dict], pages: list[PageView], findings: list) -> list[Patch]:
+        """Prepared changes (approval required) on the image elements the measurements name: the main (LCP)
+        image gets a real src when it is only in data-src, and fetchpriority=high; images PageSpeed reports as
+        off-screen get loading=lazy. Each is attached to the finding about that page (S2.06, else S2.01)."""
+        by_url = {norm(p.url): p for p in pages}
+        open_findings = {f.check_id: f for f in findings if f.status in (St.FAIL, St.WARN)}
+        patches: list[Patch] = []
+        for run in measured:
+            page = by_url.get(norm(run["url"]))
+            if page is None:
+                continue
+            element, checks = run.get("lcp_element") or "", run.get("lcp_checks") or {}
+            # A lazy image's real address is in data-src; its src is often a placeholder.
+            hint = re.search(r'data-src="([^"]+)"', element) or re.search(r'\ssrc="([^"]+)"', element)
+            image = _image_on(page, hint.group(1)) if "<img" in element and hint else None
+            page_patches = []
+            if image and image.get("locator"):
+                if image.get("lazy") and image.get("src"):
+                    page_patches.append(_attribute(self.id, page, image, "src", image["src"], "lcp-src",
+                                                   "The main image is only in data-src, so the browser finds it late; "
+                                                   "giving it a real src lets it start loading at once (also remove the "
+                                                   "lazy-loading class so a script doesn't swap it back)."))
+                if checks.get("priorityHinted") is False:
+                    page_patches.append(_attribute(self.id, page, image, "fetchpriority", "high", "lcp-priority",
+                                                   "The main image has no priority hint; fetchpriority=high tells the "
+                                                   "browser to load it before other images."))
+            for item in ((run.get("audits") or {}).get("offscreen_images") or {}).get("items", [])[:5]:
+                offscreen = _image_on(page, item.get("url") or "")
+                if offscreen and offscreen.get("locator") and not offscreen.get("lazy") and offscreen is not image:
+                    page_patches.append(_attribute(self.id, page, offscreen, "loading", "lazy",
+                                                   f"offscreen-{len(page_patches)}",
+                                                   "PageSpeed reports this image as off-screen when the page loads; "
+                                                   "loading=lazy defers it until the visitor scrolls near it."))
+            if not page_patches:
+                continue
+            target = next((open_findings[c] for c in ("S2.06", "S2.01") if c in open_findings
+                           and norm(run["url"]) in {norm(u) for u in open_findings[c].scope.pages}), None)
+            if target is None:
+                continue
+            target.patch_keys += [patch.key for patch in page_patches]
+            patches += page_patches
+        return patches
 
     # ------------------------------------------------------------ S2.01–S2.04
 
@@ -256,3 +306,20 @@ class PageExperience(Agent):
             impact="Scripts that block rendering or are never used delay everything the visitor sees.",
             fix="Load third-party widgets after the page renders (defer/async), and drop unused JavaScript and CSS.",
             verification="PageSpeed render-blocking and unused-JavaScript audits pass.", effort=Effort.M)
+
+
+def _image_on(page: PageView, url_hint: str) -> dict | None:
+    """The parsed image a measurement names. The hint can be scheme-relative or cut short ("…"), so images are
+    compared by address without scheme or query, and a cut-short hint matches the start of the address."""
+    def key(url: str) -> str:
+        return re.sub(r"^https?:", "", urljoin(page.url, url)).split("?")[0]
+    hint = key(url_hint.split("…")[0])
+    if len(hint) < 12:
+        return None
+    return next((img for img in page.model.get("images", []) if img.get("src") and key(img["src"]).startswith(hint)), None)
+
+
+def _attribute(agent_id: str, page: PageView, image: dict, name: str, value: str, slug: str, why: str) -> Patch:
+    return Patch(key=f"S2:{slug}:{page.record.id}", agent_id=agent_id, page_url=page.url, type=PatchType.ATTRIBUTE_SET,
+                 locator=Locator(**image["locator"]), after=f'{name}="{value}"', rationale=why, approval="required",
+                 client_visible_note="Helps the page show its main content sooner.")

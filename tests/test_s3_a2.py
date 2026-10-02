@@ -102,3 +102,30 @@ def test_a2_drafts_no_issue_asks_for_are_not_proposed(tmp_path):
     result, errors = validate_result(agent, agent.run_unit(ctx, agent.plan(ctx)[0]), {URL})
     assert check_statuses(agent, result.findings)["A2.02"] == St.PASS
     assert errors == [] and result.patches == []
+
+
+def test_a2_rewrites_a_section_as_a_list_only_from_its_own_words(tmp_path):
+    from engine.output.patcher import apply
+    from engine.validation import validate_result
+
+    def review(items):
+        return FakeLLM({"a2.sections": {"sections": [
+            {"id": "S1", "opening": "direct", "self_contained": True, "better_format": "none", "question": None, "answer": None},
+            {"id": "S2", "opening": "direct", "self_contained": True, "better_format": "list", "question": None,
+             "answer": None, "items": items}]}})
+
+    agent = AnswerStructure()
+    grounded = ["Rooftop restaurant serves Mughlai and continental food", "Serves food from 7 am to 11 pm for all guests",
+                "Seating for sixty people, with views across the city at sunset"]
+    ctx = ctx_for(tmp_path, review(grounded))
+    result, errors = validate_result(agent, agent.run_unit(ctx, agent.plan(ctx)[0]), {URL})
+    assert errors == []
+    [listed] = result.patches
+    assert listed.type.value == "element_replace" and listed.approval == "required" and listed.after.startswith("<ul><li>")
+    assert {f.check_id: f for f in result.findings}["A2.04"].patch_keys == [listed.key]
+    fixed = apply(DOC, URL, [listed.model_dump(mode="json")]).fixed_html
+    assert "<li>Serves food from 7 am to 11 pm for all guests</li>" in fixed and "seating for sixty people and views" not in fixed
+
+    invented = grounded[:2] + ["Live jazz band every Friday night"]  # not in the section
+    ctx = ctx_for(tmp_path / "2", review(invented))
+    assert agent.run_unit(ctx, agent.plan(ctx)[0]).patches == []

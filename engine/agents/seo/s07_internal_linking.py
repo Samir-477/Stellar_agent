@@ -56,6 +56,13 @@ class LinkPicks(BaseModel):
     links: list[LinkPick] = Field(default_factory=list)
 
 
+def destination_name(page) -> str | None:
+    """A linked page's own name: its single H1, else its title before the site name ("Gold loan | Brand")."""
+    h1s = [h["text"].strip() for h in page.model.get("headings", []) if h["level"] == 1 and h["text"].strip()]
+    name = h1s[0] if len(h1s) == 1 else re.split(r"\s+[|–—-]\s+", page.model.get("title") or "")[0].strip()
+    return name if 3 <= len(name) <= 50 and not is_generic(name) else None
+
+
 def is_generic(text: str) -> bool:
     return normalize(text).strip(" .!›»>") in GENERIC_ANCHORS
 
@@ -111,8 +118,9 @@ class InternalLinking(Agent):
             self._no_inlinks(graph, home, entry, sitemap_count),
             self._depth(graph, home, keys, coverage),
             self._contextual_inlinks(graph, keys, in_menus, home),
-            self._anchors(graph, home),
         ]
+        anchor_finding, anchor_patches = self._anchors(graph, home)
+        findings.append(anchor_finding)
         redirect_finding, redirect_patches = self._redirects(graph)
         findings.append(redirect_finding)
         findings.append(self._contextual_outlinks(graph, keys))
@@ -132,7 +140,8 @@ class InternalLinking(Agent):
             generic = sum(1 for e in graph.outbound(node, "body") if is_generic(e.text))
             rows.append([graph.nodes[node].url, len({e.source for e in body}), len({e.source for e in menus}),
                          depths.get(node, "not reached"), generic, suggested.get(node, 0)])
-        return AgentResult(findings=findings, patches=redirect_patches + link_patches, coverage=coverage,
+        return AgentResult(findings=findings, patches=redirect_patches + link_patches + anchor_patches,
+                           coverage=coverage,
                            signature_table={"columns": self.signature_columns, "rows": rows})
 
     # ------------------------------------------------------------ S7.01
@@ -203,17 +212,40 @@ class InternalLinking(Agent):
 
     # ------------------------------------------------------------ S7.04
 
+    def _anchor_patches(self, graph: LinkGraph, generic) -> list[Patch]:
+        """Prepared changes (approval required): a vague text link names its destination, from that page's own H1
+        or title ("Know more" → "Know more about Gold loan"). Links that are images, or whose destination has no
+        clear name, are left for the team."""
+        patches, seen = [], set()
+        for edge in generic:
+            locator, target = edge.link.get("locator"), graph.nodes[edge.target]
+            name = destination_name(target)
+            key = f"S7.04:{text_hash(edge.source + edge.link['href'] + edge.text)}"
+            if not locator or edge.link.get("image") or not name or key in seen:
+                continue
+            seen.add(key)
+            words = normalize(edge.text).strip(" .!›»>")
+            text = name if words in ("click here", "here", "link", "this", "go", "visit")                 else f"{edge.text.strip(' .!›»>')} about {name}"
+            patches.append(Patch(key=key, agent_id=self.id, page_url=graph.nodes[edge.source].url,
+                                 type=PatchType.TEXT_REPLACE, locator=Locator(**locator), before=edge.text,
+                                 after=text, confidence=Confidence.LIKELY, approval="required",
+                                 rationale=f"Names the page the link opens ({target.url}), using that page's own heading. "
+                                           "If the link holds an icon, keep it in your template.",
+                                 client_visible_note="Link words that say where the link goes."))
+        return patches[:10]
+
     def _anchors(self, graph: LinkGraph, home):
         home_node = norm(home.url) if home else None
         body = [e for e in graph.edges if e.placement == "body" and e.target != home_node]  # breadcrumb "Home" is fine
         if not body:
-            return self.finding("S7.04", St.NOT_APPLICABLE, "No body links between sampled pages")
+            return self.finding("S7.04", St.NOT_APPLICABLE, "No body links between sampled pages"), []
         generic = [e for e in body if is_generic(e.text)]
         empty = [e for e in body if not e.text.strip()]
         share = (len(generic) + len(empty)) / len(body)
         if share <= 0.3 and not empty:
             return self.finding("S7.04", St.PASS, "Body links use descriptive anchor text",
-                                evidence=[EvidenceRef(type="html_excerpt", excerpt=f"{len(body)} body links checked")])
+                                evidence=[EvidenceRef(type="html_excerpt", excerpt=f"{len(body)} body links checked")]), []
+        patches = self._anchor_patches(graph, generic)
         return self.finding(
             "S7.04", St.WARN,
             f"{tally((len(generic), 'generic'), (len(empty), 'empty'))} anchor(s) among {len(body)} body links",
@@ -224,7 +256,8 @@ class InternalLinking(Agent):
             impact="Anchors like \"know more\" or image links without alt text tell search engines nothing about "
                    "the linked page.",
             fix="Use anchors that name the destination; give linked images descriptive alt text.",
-            verification="Body anchors describe their targets.", effort=Effort.S)
+            patch_keys=[p.key for p in patches],
+            verification="Body anchors describe their targets.", effort=Effort.S), patches
 
     # ------------------------------------------------------------ S7.05
 

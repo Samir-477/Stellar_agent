@@ -140,6 +140,7 @@ class PatchType(StrEnum):
     ELEMENT_INSERT = "element_insert"
     LINK_INSERT = "link_insert"  # wrap an exact phrase inside the located element in <a href>
     ELEMENT_REMOVE = "element_remove"
+    ELEMENT_REPLACE = "element_replace"  # swap the located element for new markup (a paragraph becomes a list)
     HEAD_UPSERT = "head_upsert"
     JSONLD_UPSERT = "jsonld_upsert"
     FILE_PATCH = "file_patch"

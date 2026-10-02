@@ -134,6 +134,11 @@ def _apply_one(doc, patch: dict, element) -> str | None:
             return "anchor phrase not found in the element"
     elif kind == "element_remove":
         element.drop_tree()
+    elif kind == "element_replace":
+        for node in _fragment(patch["after"]):
+            if not isinstance(node, str):
+                element.addprevious(node)
+        element.drop_tree()
     elif kind == "jsonld_upsert":
         new = _fragment(patch["after"])[0]
         element.addprevious(new)

@@ -14,6 +14,7 @@ content is judged against fixed thresholds rather than the ranking median. Findi
 
 from __future__ import annotations
 
+import html
 import re
 from collections import Counter
 from dataclasses import dataclass, field
@@ -27,7 +28,7 @@ from engine.agents.common import (PageView, archetype, brand_tokens, business_na
                                   key_page_urls, load_pages, norm, tally)
 from engine.context import AgentContext, WorkUnit
 from engine.lib.content import own_text, sampled_text, template_blocks, template_headings
-from engine.lib.grounding import normalize, quote_in_text
+from engine.lib.grounding import normalize, quote_in_text, value_supported
 from engine.lib.locators import text_hash
 from engine.lib.retrieval import tokens
 from engine.lib.textstats import outdated_mentions, repeated_phrases, sentences, undated_offer, words
@@ -42,6 +43,9 @@ from engine.schemas import (
     Effort,
     EvidenceRef,
     EvidenceType,
+    Locator,
+    Patch,
+    PatchType,
     Pillar,
     Severity as Sev,
 )
@@ -73,6 +77,7 @@ class Subtopic(BaseModel):
 class IntroVerdict(BaseModel):
     verdict: str | None = None
     quote: str | None = None
+    rewrite: str | None = None
 
 
 class H1Verdict(BaseModel):
@@ -103,6 +108,7 @@ class Judged:
     subtopics: list[tuple[str, list[str], str]] = field(default_factory=list)  # (topic, result ids, status)
     intro: str | None = None
     intro_quote: str | None = None
+    intro_rewrite: str | None = None  # a drafted opening that passed the fact check
     h1: dict[str, H1Verdict] = field(default_factory=dict)  # by page url
     dropped: int = 0
 
@@ -235,13 +241,14 @@ class OnPageContent(Agent):
                                    "(map pages to queries to confirm).")
 
         judged = self._judge(ctx, entry, key_pages, template, target, coverage)
+        opening = self._opening_patch(entry, judged, template) if entry is not None else None
         the_pack = pack(archetype(ctx))
         loans = bool(the_pack and the_pack.ymyl == "high")
         names = brand_tokens(ctx)
         findings = [
             self._h1(key_pages, judged, entry),
             self._hierarchy(key_pages, template_heads, own),
-            self._intro(entry, judged, target),
+            self._intro(entry, judged, target, opening),
             self._intent(entry, judged, target),
             self._subtopics(entry, judged, target),
             self._thin(key_pages, own, template, entry),
@@ -255,7 +262,7 @@ class OnPageContent(Agent):
                        ", ".join(t for t, _, status in judged.subtopics if status == "missed") or "—"]
         rows = [[page.url, " / ".join(h1_texts(page))[:80] or "(none)", sum(len(t.split()) for t in own[page.url]),
                  *(entry_cells if page is entry else ["—"] * 4)] for page in key_pages]
-        return AgentResult(findings=findings, coverage=coverage,
+        return AgentResult(findings=findings, patches=[opening] if opening else [], coverage=coverage,
                            signature_table={"columns": self.signature_columns, "rows": rows})
 
     # ------------------------------------------------------------ LLM
@@ -279,7 +286,7 @@ class OnPageContent(Agent):
                         for i, p in enumerate(with_h1, start=1))
         query = target.query if target else "none (judge the intro against the page's title and H1)"
         try:
-            answer = ctx.llm.complete_json(load_prompt("s4.content", 2), ContentAnswer,
+            answer = ctx.llm.complete_json(load_prompt("s4.content", 3), ContentAnswer,
                                            business=f"{business_name(ctx)} ({archetype(ctx) or 'archetype unknown'})",
                                            query=query, page=page, results=results, h1s=h1s).data
         except LLMError as exc:
@@ -307,6 +314,13 @@ class OnPageContent(Agent):
         if answer.intro.verdict in ("answers", "partial", "filler") and answer.intro.quote \
                 and quote_in_text(answer.intro.quote, intro):
             judged.intro, judged.intro_quote = answer.intro.verdict, answer.intro.quote.strip()
+            rewrite = " ".join((answer.intro.rewrite or "").split())
+            # Kept only when every number and most words come from the page itself.
+            if judged.intro != "answers" and 25 <= len(rewrite.split()) <= 70 \
+                    and value_supported(rewrite, f"{intro} {body}", min_word_share=0.6):
+                judged.intro_rewrite = rewrite
+            elif rewrite:
+                judged.dropped += 1
         elif answer.intro.verdict:
             judged.dropped += 1
         by_id = {v.id: v for v in answer.h1s}
@@ -407,7 +421,20 @@ class OnPageContent(Agent):
 
     # ------------------------------------------------------------ S4.03–S4.05
 
-    def _intro(self, entry, judged: Judged, target):
+    def _opening_patch(self, entry, judged: Judged, template) -> Patch | None:
+        """A prepared change (approval required): the drafted opening, placed before the page's first own passage."""
+        first = next((p for p in entry.model.get("passages", []) if text_hash(p["text"]) not in template
+                      and p.get("locator")), None)
+        if not judged.intro_rewrite or first is None:
+            return None
+        return Patch(key=f"S4:opening:{entry.record.id}", agent_id=self.id, page_url=entry.url,
+                     type=PatchType.ELEMENT_INSERT, locator=Locator(**first["locator"]), confidence=Confidence.LIKELY,
+                     after=f"<p>{html.escape(judged.intro_rewrite, quote=False)}</p>", approval="required",
+                     rationale="An opening that says what the page offers first, written only from the page's own text "
+                               "(every number in it is on the page). Review the wording before publishing.",
+                     client_visible_note="Opens the page with what visitors came for.")
+
+    def _intro(self, entry, judged: Judged, target, opening: Patch | None = None):
         if entry is None or judged.intro is None:
             return self.finding("S4.03", St.UNVERIFIABLE, "Entry page opening not reviewed")
         evidence = [EvidenceRef(type="html_excerpt", url=entry.url, excerpt=f"\"{judged.intro_quote}\"")]
@@ -419,6 +446,7 @@ class OnPageContent(Agent):
             "The entry page opens with filler" if judged.intro == "filler"
             else "The entry page's opening only partly answers the searcher",
             pages=[entry.url], confidence=Confidence.LIKELY, key_page=True, evidence=evidence,
+            patch_keys=[opening.key] if opening else [],
             impact="Searchers and AI assistants read the first lines to decide if a page answers them.",
             fix=f"Open with the direct answer for \"{target.query}\": what it is, where, the key facts."
             if target else "Open with what the page offers: what it is, where, the key facts.",

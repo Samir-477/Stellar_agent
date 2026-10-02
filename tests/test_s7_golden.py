@@ -81,3 +81,16 @@ def test_s7_finds_planted_linking_issues(tmp_path):
 def test_phrases_skip_brand_and_stop_words():
     got = phrases("Sterling Regalia Agra – Stay Close to the Taj | Sterling Holidays", {"sterling", "holidays"})
     assert "regalia agra" in got and "sterling holidays" not in got and not any(p.startswith("the ") for p in got)
+
+
+def test_s7_names_the_destination_of_a_vague_link_for_approval(tmp_path):
+    store, blobs = build(tmp_path)
+    agent = InternalLinking()
+    ctx = AgentContext(SnapshotReader(store, blobs, "s"), ClientProfile(id="c", name="x", primary_url=f"{B}/agra"),
+                       None, None)
+    result, errors = validate_result(agent, agent.run_unit(ctx, agent.plan(ctx)[0]), {p.final_url for p in store.pages.values()})
+    assert errors == []
+    [renamed] = [p for p in result.patches if p.key.startswith("S7.04")]
+    # "Know more" opens /old-offer, which forwards to the offers page: named by that page's own H1.
+    assert (renamed.before, renamed.after, renamed.approval) == ("Know more", "Know more about Room offers", "required")
+    assert {f.check_id: f for f in result.findings}["S7.04"].patch_keys == [renamed.key]  # the image link is left alone

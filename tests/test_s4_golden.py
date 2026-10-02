@@ -156,3 +156,28 @@ def test_text_in_divs_counts_as_the_pages_own_content():
 def test_subtopic_alternatives_count_as_mentions():
     assert OnPageContent._mentioned("rooftop or swimming pool", "a fourth-floor swimming pool with Taj views")
     assert not OnPageContent._mentioned("prices and rates", "a fourth-floor swimming pool with Taj views")
+
+
+def partial_with(rewrite):
+    def build_answer(v):
+        out = answer(v)
+        out["intro"] = {"verdict": "partial", "quote": "Grand Agra is a 40-room hotel 1.4 km from the Taj Mahal's East Gate",
+                        "rewrite": rewrite}
+        return out
+    return build_answer
+
+
+def test_s4_prepares_a_grounded_opening_for_approval(tmp_path):
+    rewrite = ("Grand Agra is a 40-room hotel 1.4 km from the Taj Mahal's East Gate, with a rooftop pool and a "
+               "restaurant serving Mughlai food. Agra Cantt station is 8 km away and the airport is 12 km from the hotel.")
+    agent, result, _ = run(tmp_path, FakeLLM({"s4.content": partial_with(rewrite)}))
+    [opening] = result.patches
+    assert opening.approval == "required" and opening.type.value == "element_insert" and rewrite in opening.after
+    assert {f.check_id: f for f in result.findings}["S4.03"].patch_keys == [opening.key]
+
+
+def test_s4_drops_an_opening_that_adds_a_number_the_page_doesnt_state(tmp_path):
+    invented = ("Grand Agra is a 40-room hotel just 200 metres from the Taj Mahal, with a rooftop pool and a "
+                "restaurant serving Mughlai food, and rooms from 4,500 rupees a night for families and couples.")
+    agent, result, _ = run(tmp_path, FakeLLM({"s4.content": partial_with(invented)}))
+    assert result.patches == [] and {f.check_id: f for f in result.findings}["S4.03"].patch_keys == []

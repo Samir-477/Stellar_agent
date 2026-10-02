@@ -10,6 +10,7 @@ and most of the draft's words must come from the section text.
 
 from __future__ import annotations
 
+import html
 import re
 
 from pydantic import BaseModel, Field
@@ -48,6 +49,7 @@ class SectionReview(BaseModel):
     better_format: str = "none"
     question: str | None = None
     answer: str | None = None
+    items: list[str] = Field(default_factory=list)  # the section as list items, when it reads better as a list
 
 
 class SectionsReview(BaseModel):
@@ -194,15 +196,35 @@ class AnswerStructure(Agent):
             f"TEXT: {' '.join(' '.join(b['text'] for b in sec['passages']).split()[:220])}"
             for i, (page, sec) in enumerate(targets))
         try:
-            answer = ctx.llm.complete_json(load_prompt("a2.sections", 1), SectionsReview,
+            answer = ctx.llm.complete_json(load_prompt("a2.sections", 2), SectionsReview,
                                            subject=subject, sections=blocks).data
         except LLMError as exc:
             return {}, f"LLM review failed: {exc}"
         return {r.id: r for r in answer.sections}, None
 
+    def _as_list(self, page, sec, review: SectionReview, text: str, index: int) -> Patch | None:
+        """A prepared change (approval required): a one-paragraph section rewritten as the list or steps the model
+        proposed. Kept only when every item comes from the section's own words and numbers."""
+        items = [" ".join(item.split()) for item in review.items]
+        passages = sec.get("passages") or []
+        if review.better_format not in ("list", "steps") or not 2 <= len(items) <= 8 or len(passages) != 1                 or not passages[0].get("locator"):
+            return None
+        if not all(1 <= len(item.split()) <= 30 and value_supported(item, text, min_word_share=0.8) for item in items):
+            return None
+        tag = "ol" if review.better_format == "steps" else "ul"
+        body = "".join(f"<li>{html.escape(item, quote=False)}</li>" for item in items)
+        return Patch(key=f"A2:format:{page.record.id}:{index}", agent_id=self.id, page_url=page.url,
+                     type=PatchType.ELEMENT_REPLACE, locator=Locator(**passages[0]["locator"]),
+                     before=passages[0]["text"][:4000], after=f"<{tag}>{body}</{tag}>", confidence=Confidence.LIKELY,
+                     approval="required",
+                     rationale=f"The \"{sec['heading']}\" section as {'steps' if tag == 'ol' else 'a list'}, using only "
+                               "the section's own words. Review it before publishing.",
+                     client_visible_note="Turns a dense paragraph into a list that's easy to scan and to quote.")
+
     def _from_reviews(self, targets, reviews, keys):
         findings, patches, rows = [], [], []
         buried, not_contained, reformat, drafts, rejected = [], [], [], [], 0
+        formats: dict[tuple[str, str], str] = {}
         for i, (page, sec) in enumerate(targets):
             review = reviews.get(f"S{i + 1}")
             if review is None:
@@ -216,6 +238,10 @@ class AnswerStructure(Agent):
                 not_contained.append((page, sec))
             if review.better_format in ("list", "table", "steps"):
                 reformat.append((page, sec, review.better_format))
+                listed = self._as_list(page, sec, review, text, i)
+                if listed:
+                    patches.append(listed)
+                    formats[(page.url, sec["heading"])] = listed.key
             draft_ok = bool(review.answer and review.question and 30 <= len(review.answer.split()) <= 75
                             and value_supported(review.answer, source, min_word_share=0.6))
             if review.answer and not draft_ok:
@@ -271,6 +297,7 @@ class AnswerStructure(Agent):
             pages=sorted({p.url for p, _, _ in reformat}), confidence=Confidence.LIKELY,
             evidence=[EvidenceRef(type="html_excerpt", url=p.url, excerpt=f"\"{s['heading']}\" → {fmt}")
                       for p, s, fmt in reformat[:5]],
+            patch_keys=[formats[(p.url, s["heading"])] for p, s, _ in reformat if (p.url, s["heading"]) in formats],
             impact="List- and table-shaped answers are what featured snippets and AI Overviews lift.",
             fix="Present these as lists or tables.", verification="Sections use the suggested format.",
             effort=Effort.S) if reformat

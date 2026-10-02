@@ -64,3 +64,28 @@ def test_s2_without_viewport_or_measurements(tmp_path):
     agent, result = run(build(tmp_path / "2", "width=device-width", [{"url": f"{B}/agra", "error": "HTTP 400"}]))
     assert set(check_statuses(agent, result.findings).values()) == {St.UNVERIFIABLE}
     assert any("HTTP 400" in s for s in result.coverage.skipped)
+
+
+def test_s2_prepares_hints_for_a_main_image_loaded_late(tmp_path):
+    from engine.output.patcher import apply
+
+    store, blobs = MemoryStore(), LocalBlobStore(tmp_path / "b")
+    snap = SnapshotWriter(store, blobs, "s")
+    html = ("<!doctype html><html lang='en'><head><title>Grand Agra</title></head><body><h1>Grand</h1>"
+            "<img class='hero lazy' src='data:image/gif;base64,R0lGOD' data-src='/hero-big.jpg' alt='Pool'>"
+            "<img src='/gallery-9.jpg' alt='Garden'></body></html>")
+    page = snap.add_page(PageRecord(id="p0", snapshot_id="s", url=f"{B}/agra", final_url=f"{B}/agra", status=200))
+    snap.add_evidence("C2", EvidenceType.PAGES_PARSED, {}, page_id=page.id,
+                      blob_key=snap.put_blob("snapshots/s/pages/p0/parsed.json", json.dumps(parse_page(html, page.url))))
+    measured = {"url": f"{B}/agra", **summarize(PSI)}
+    measured["lcp_element"] = '<img class="hero lazy" src="data:image/gif;base64,R0lGOD" data-src="/hero-big.jpg">'
+    measured["lcp_checks"] = {"requestDiscoverable": False, "eagerlyLoaded": True, "priorityHinted": False}
+    measured["audits"]["offscreen_images"] = {"score": 0.5, "items": [{"url": f"{B}/gallery-9.jpg"}]}
+    snap.add_evidence("C11", EvidenceType.PERFORMANCE, measured)
+    agent, result = run(SnapshotReader(store, blobs, "s"))
+    hints = {p.key.split(":")[1]: p for p in result.patches}
+    assert set(hints) == {"lcp-src", "lcp-priority", "offscreen-2"} and all(p.approval == "required" for p in hints.values())
+    assert {f.check_id: f for f in result.findings}["S2.06"].patch_keys == [p.key for p in result.patches]
+    fixed = apply(html, f"{B}/agra", [p.model_dump(mode="json") for p in result.patches])
+    assert fixed.not_placed == [] and f'src="{B}/hero-big.jpg"' in fixed.fixed_html
+    assert 'fetchpriority="high"' in fixed.fixed_html and 'loading="lazy"' in fixed.fixed_html

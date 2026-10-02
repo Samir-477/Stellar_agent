@@ -7,7 +7,7 @@ import type { Segment } from "@/lib/types";
 const TYPE_LABEL: Record<string, string> = {
   text_replace: "Text rewrite", attribute_set: "Attribute change", element_insert: "New content", element_remove: "Removal",
   head_upsert: "Head tag", jsonld_upsert: "Structured data", file_patch: "Site file", header_recommendation: "HTTP header",
-  link_insert: "New internal link",
+  link_insert: "New internal link", element_replace: "Rewrite",
 };
 
 export function changeTypeLabel(type: string): string {
