@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from lxml import etree
 from lxml import html as lxml_html
 
+from engine.lib.jsonld import merge3, script_tag
 from engine.lib.locators import text_hash
 
 INVISIBLE = {"head_upsert", "jsonld_upsert", "file_patch", "header_recommendation"}
@@ -344,7 +345,40 @@ def upgrade_annotated(page_html: bytes | str, titles: dict[str, str] | None = No
     return lxml_html.tostring(doc, doctype="<!DOCTYPE html>", encoding="unicode")
 
 
+def _merge_shared_blocks(page_html: str, patches: list[dict]) -> tuple[list[dict], dict[str, list[str]]]:
+    """Agents work apart, so two of them can rewrite the same JSON-LD block (one fills the name, another adds
+    sameAs). Applied one after the other, the second would overwrite the first; instead they become one change
+    with both edits merged against the block as captured. Returns the patches and {lead key: merged keys}."""
+    groups: dict[str, list[dict]] = {}
+    for patch in patches:
+        locator = patch.get("locator") or {}
+        ident = locator.get("xpath") or locator.get("css")
+        if patch["type"] == "jsonld_upsert" and ident:
+            groups.setdefault(ident, []).append(patch)
+    doc = lxml_html.fromstring(page_html)
+    merged, aliases = {}, {}
+    for group in (g for g in groups.values() if len(g) > 1):
+        element, _ = _locate(doc, group[0]["locator"])
+        try:
+            base = json.loads(element.text or "") if element is not None else None
+            edits = [json.loads(_fragment(p["after"])[0].text or "") for p in group]
+        except (ValueError, TypeError, IndexError):
+            continue
+        if base is None:
+            continue
+        result = edits[0]
+        for edit in edits[1:]:
+            result = merge3(base, result, edit)
+        lead = group[0]
+        merged[lead["key"]] = {**lead, "after": script_tag(result),
+                               "rationale": " ".join(p.get("rationale", "") for p in group).strip()}
+        aliases[lead["key"]] = [p["key"] for p in group[1:]]
+    folded = {k for keys in aliases.values() for k in keys}
+    return [merged.get(p["key"], p) for p in patches if p["key"] not in folded], aliases
+
+
 def apply(page_html: str, page_url: str, patches: list[dict]) -> PlacementResult:
+    patches, aliases = _merge_shared_blocks(page_html, patches)
     fixed = lxml_html.fromstring(page_html)
     annotated = lxml_html.fromstring(page_html)
     result = PlacementResult("", "")
@@ -373,6 +407,12 @@ def apply(page_html: str, page_url: str, patches: list[dict]) -> PlacementResult
         card_data[f"fix-{index}"] = {"title": patch.get("title") or "Suggested change",
                                      "note": patch.get("client_visible_note", ""), "before": patch.get("before"),
                                      "after": patch["after"], "why": patch.get("rationale", "")}
+    for lead, keys in aliases.items():  # merged changes share the fate of the change they were folded into
+        if lead in result.placed:
+            result.placed += keys
+        else:
+            reason = next((n["reason"] for n in result.not_placed if n["key"] == lead), "not placed")
+            result.not_placed += [{"key": k, "reason": reason} for k in keys]
     fixed = freeze_doc(fixed, page_url)
     annotated = freeze_doc(annotated, page_url)
     attach_overlay(annotated, card_data)

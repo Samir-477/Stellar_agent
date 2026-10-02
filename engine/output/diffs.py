@@ -110,6 +110,8 @@ def snippet(page_html: str | None, patch: dict) -> dict:
         existing = head.cssselect(selector) if head is not None and selector else []
         before = _outer(existing[0]) if existing else None
         after = _outer(new)
+        if new.tag == "script":  # a new JSON-LD block: show the JSON itself
+            language, after = "json", _pretty_json(new.text)
     else:
         doc = lxml_html.fromstring(page_html)
         element, reason = _locate(doc, patch.get("locator"))

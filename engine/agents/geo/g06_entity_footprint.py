@@ -12,10 +12,10 @@ import re
 from urllib.parse import urlsplit
 
 from engine.agents.base import Agent
-from engine.agents.common import archetype, business_name, entry_page, load_pages
+from engine.agents.common import archetype, brand_tokens, business_name, entry_page, load_pages
 from engine.collectors.c04_facts import BUSINESS_TYPES
 from engine.context import AgentContext, WorkUnit
-from engine.lib.jsonld import page_nodes, types_of
+from engine.lib.jsonld import page_nodes, script_tag, types_of, updated
 from engine.lib.urls import site_label
 from engine.rules.packs import pack
 from engine.schemas import (
@@ -27,6 +27,9 @@ from engine.schemas import (
     Effort,
     EvidenceRef,
     EvidenceType,
+    Locator,
+    Patch,
+    PatchType,
     Pillar,
     Severity as Sev,
 )
@@ -44,6 +47,18 @@ def entity_types(ctx: AgentContext) -> str:
     the_pack = pack(archetype(ctx))
     own = the_pack.entity_type if the_pack else "Organization"
     return "Organization" if own == "Organization" else f"Organization or {own}"
+
+
+SEARCH_PATH = re.compile(r"/(s|search|find|results?)(/|$)", re.I)
+
+
+def listing_page(url: str, own_site: str) -> bool:
+    """A page about the business on another site: not the client's own site, not a search or results page, not a
+    bare domain, and not a Google page (Maps and Finance results can be another business or a stock quote)."""
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    return (site_label(host) not in (own_site, "google") and not parts.query and bool(parts.path.strip("/"))
+            and not SEARCH_PATH.search(parts.path))
 
 
 def profile_key(url: str) -> str:
@@ -90,11 +105,10 @@ class OffsiteEntityFootprint(Agent):
         coverage = Coverage(examined={"footprint_parts": len(parts)})
         coverage.limits.append("One capture on one day; listing searches match the business name in result titles.")
         rows: list[list] = []
+        same_as_finding, prepared = self._same_as(ctx, [p for p in (entry, home) if p is not None], parts, rows)
         findings = [self._kg(parts.get("kg"), ctx, rows), self._wiki(parts.get("wiki"), ctx, rows, coverage),
-                    self._platforms(parts.get("platforms"), rows),
-                    self._same_as(ctx, [p for p in (entry, home) if p is not None], parts, rows),
-                    self._brand_results(ctx)]
-        return AgentResult(findings=findings, coverage=coverage,
+                    self._platforms(parts.get("platforms"), rows), same_as_finding, self._brand_results(ctx)]
+        return AgentResult(findings=findings, patches=[prepared] if prepared else [], coverage=coverage,
                            signature_table={"columns": self.signature_columns, "rows": rows})
 
     def _kg(self, part, ctx, rows):
@@ -187,7 +201,7 @@ class OffsiteEntityFootprint(Agent):
     def _same_as(self, ctx, pages, parts, rows):
         declared = same_as(pages)
         if not pages:
-            return self.finding("G6.04", St.UNVERIFIABLE, "Entry page and homepage not in the sample")
+            return self.finding("G6.04", St.UNVERIFIABLE, "Entry page and homepage not in the sample"), None
         conflicts = {site: urls for site, urls in declared.items() if len(urls) > 1}
         listings = [p for p in (parts.get("platforms") or {}).get("platforms", []) if p["found"] and p.get("url")]
         missing = [p for p in listings if site_label(urlsplit(p["url"]).hostname or "") not in declared]
@@ -205,17 +219,53 @@ class OffsiteEntityFootprint(Agent):
                 + ", ".join(conflicts), evidence=evidence, pages=[p.url for p in pages],
                 impact="Two profiles for one business split its reviews and confuse systems that merge entities.",
                 fix="Pick the official profile per site, list only it in sameAs on every page, and merge or retire "
-                    "the other.", verification="One profile per site in sameAs.", effort=Effort.S)
+                    "the other.", verification="One profile per site in sameAs.", effort=Effort.S), None
         if not declared or missing:
+            prepared = self._add_same_as(ctx, pages, missing)
             return self.finding(
                 "G6.04", St.WARN, "No sameAs links in the structured data" if not declared
                 else f"{len(missing)} listing(s) found off-site aren't in sameAs", pages=[p.url for p in pages],
+                patch_keys=[prepared.key] if prepared else [],
                 evidence=evidence or [EvidenceRef(type="html_excerpt", excerpt="no sameAs on business entities")],
                 impact="sameAs tells search engines and AI systems which profiles belong to the business.",
                 fix=f"Add the official profiles and main listings to sameAs in the {entity_types(ctx)} JSON-LD.",
-                verification="sameAs lists the official profiles.", effort=Effort.S)
+                verification="sameAs lists the official profiles.", effort=Effort.S), prepared
         return self.finding("G6.04", St.PASS, "sameAs lists one profile per site, matching the listings found",
-                            evidence=[EvidenceRef(type="html_excerpt", excerpt=", ".join(sorted(declared))[:300])])
+                            evidence=[EvidenceRef(type="html_excerpt", excerpt=", ".join(sorted(declared))[:300])]), None
+
+    def _add_same_as(self, ctx, pages, missing: list[dict]) -> Patch | None:
+        """A prepared fix (approval required): the listings found off-site, added to sameAs on the existing business
+        entity. A listing is added only when its title names the business (every distinctive word of its name),
+        so a look-alike listing found by search is never declared as the business's own profile."""
+        tokens = brand_tokens(ctx)
+        own = site_label(urlsplit(ctx.client.primary_url).hostname or "")
+        verified = [m["url"] for m in missing if listing_page(m["url"], own)
+                    and tokens and all(t in (m.get("title") or "").lower() for t in tokens)]
+        if not verified:
+            return None
+        for page in pages:
+            for block in page.model.get("jsonld", []):
+                locator = block.get("locator") or {}
+                if "parsed" not in block or not (locator.get("css") or locator.get("xpath")):
+                    continue
+
+                def add(node):
+                    links = node.get("sameAs") or []
+                    links = [links] if isinstance(links, str) else list(links)
+                    new = [u for u in verified if profile_key(u) not in {profile_key(x) for x in links if isinstance(x, str)}]
+                    node["sameAs"] = links + new
+                    return bool(new)
+
+                parsed = updated(block["parsed"], lambda n: bool(types_of(n) & BUSINESS_TYPES), add)
+                if parsed is not None:
+                    return Patch(
+                        key=f"G6.04:sameas:{page.record.id}", agent_id=self.id, page_url=page.url,
+                        type=PatchType.JSONLD_UPSERT, locator=Locator(**block["locator"]),
+                        before=(block.get("raw") or "")[:4000], after=script_tag(parsed), approval="required",
+                        rationale="Adds the listings found for the business, each titled with its name: "
+                                  + ", ".join(verified) + ".",
+                        client_visible_note="Tells search engines and AI systems which profiles belong to the business.")
+        return None
 
     def _brand_results(self, ctx):
         brand = [ev.payload for ev in ctx.snapshot.evidence(EvidenceType.SERP)
